@@ -1,0 +1,184 @@
+---
+title: "KanbanView: Drag-and-Drop Kanban Board"
+description: "Build typed kanban boards with KanbanView: define columns, row fields, and colors in config arrays, then wire real-time updates via useQueuedAction."
+keywords: ["kanban", "kanbanview", "board", "drag-and-drop", "realtime", "react-declarative"]
+---
+
+The `KanbanView` component in react-declarative lets you build fully typed kanban boards from a `columns` config array. Each column maps to a swimlane with a label, accent color, and an array of row definitions that describe what data fields to display on each card. Real-time support is achieved by combining `KanbanView` with the `useQueuedAction` hook.
+
+## Overview
+
+```tsx
+import {
+  KanbanView,
+  type IBoardColumn,
+  type IBoardRow,
+  type IBoardItem,
+} from 'react-declarative';
+```
+
+## IBoardRow interface
+
+Each row definition maps a label to a value callback that receives the item's id and data object.
+
+```typescript
+interface IBoardRow<Data = IAnything, Payload = IAnything> {
+  label: React.ReactNode;
+  value: (id: string, data: Data, payload: Payload) => React.ReactNode | Promise<React.ReactNode>;
+  visible?: boolean | ((id: string, data: Data, payload: Payload) => boolean | Promise<boolean>);
+  click?: (id: string, data: Data, payload: Payload) => void | Promise<void>;
+}
+```
+
+## IBoardColumn interface
+
+```typescript
+interface IBoardColumnInternal<Data = IAnything, Payload = IAnything, ColumnType = IAnything> {
+  column: ColumnType;  // column key — must match the column field on each item
+  color?: string;      // accent color for the column header
+  label?: string;      // display name shown in the column header
+  divider?: boolean;   // render as a visual divider instead of a swimlane
+  rows: IBoardRow<Data, Payload>[];
+}
+
+// IBoardColumn also accepts IBoardDivider for visual separators
+type IBoardColumn<Data, Payload, ColumnType> =
+  IBoardColumnInternal<Data, Payload, ColumnType> | IBoardDivider;
+```
+
+## Full example
+
+The following example is taken directly from the react-declarative README:
+
+<Tabs>
+  <Tab title="Row definitions">
+    ```tsx
+    interface ILeadRow {
+      first_name: string;
+      last_name: string;
+      email: string;
+      phone: string;
+      hire_date: string;
+    }
+
+    const rows: IBoardRow<ILeadRow>[] = [
+      {
+        label: "Display name",
+        value: (id, employee) =>
+          [employee.first_name, employee.last_name].join(" "),
+      },
+      {
+        label: "Email",
+        value: (id, employee) => employee.email,
+        click: (id, data, payload) => payload.pickEmployeePreviewModal(id),
+      },
+      {
+        label: "Phone",
+        value: (id, employee) => employee.phone,
+      },
+      {
+        label: "Hire date",
+        value: (id, employee) => employee.hire_date,
+      },
+    ];
+    ```
+  </Tab>
+  <Tab title="Column definitions">
+    ```tsx
+    const columns: IBoardColumn<ILeadRow>[] = [
+      {
+        color: "#00ACC1",
+        column: "cold",
+        label: "Cold",
+        rows,
+      },
+      {
+        color: "#9C27B0",
+        column: "contact",
+        label: "Contact",
+        rows,
+      },
+      {
+        color: "#FFA000",
+        column: "draft",
+        label: "Draft",
+        rows,
+      },
+      {
+        color: "#2E7D32",
+        column: "deal",
+        label: "In a deal",
+        rows,
+      },
+    ];
+    ```
+  </Tab>
+  <Tab title="Rendering">
+    ```tsx
+    <KanbanView<ILeadRow>
+      sx={{
+        height: "calc(100vh - 145px)",
+      }}
+      onChangeColumn={handleChangeColumn}
+      columns={columns}
+      items={data}
+    />
+    ```
+  </Tab>
+</Tabs>
+
+## onChangeColumn callback
+
+When a card is dragged to a new column, `onChangeColumn` fires with the item id and the new column key:
+
+```tsx
+const handleChangeColumn = async (id: string, column: string) => {
+  await ioc.leadService.updateColumn(id, column);
+};
+```
+
+## Realtime support pattern
+
+Connect `KanbanView` to a WebSocket or server-sent event stream using `useQueuedAction`. The queue ensures concurrent messages are processed in order, preventing state races.
+
+```tsx
+const { execute } = useQueuedAction(
+  async ({ type, payload }) => {
+    if (type === "create-action") {
+      // handle creation
+    }
+    if (type === "update-action") {
+      // handle update
+    }
+    if (type === "remove-action") {
+      // handle removal
+    }
+  },
+  {
+    onLoadStart: () => ioc.layoutService.setAppbarLoader(true),
+    onLoadEnd: () => ioc.layoutService.setAppbarLoader(false),
+  }
+);
+
+useEffect(() => ioc.kanbanService.createSubject.subscribe(execute), []);
+useEffect(() => ioc.kanbanService.updateSubject.subscribe(execute), []);
+useEffect(() => ioc.kanbanService.removeSubject.subscribe(execute), []);
+```
+
+<Note>
+  `IBoardItem` must include a field whose name matches the `column` value on each `IBoardColumn`. The component uses this field to determine which swimlane to render the card in.
+</Note>
+
+## Key props
+
+| Prop | Type | Description |
+|---|---|---|
+| `columns` | `IBoardColumn<Data>[]` | Column definitions including row templates and accent colors. |
+| `items` | `IBoardItem<Data>[]` | The data items to render as cards. |
+| `onChangeColumn` | `(id: string, column: string) => void` | Called when a card is moved to a new column. |
+| `sx` | `SxProps` | MUI system prop for layout overrides (e.g. height). |
+| `payload` | `Payload` | Arbitrary payload passed through to every `IBoardRow.value` and `IBoardRow.click` callback. |
+
+<Tip>
+  All row `value` callbacks support `async`, so you can fetch supplementary data (e.g. avatar URLs) per card without restructuring your items array.
+</Tip>

@@ -1,0 +1,262 @@
+---
+title: "WizardView: Multi-Step Wizard with Routing"
+description: "Build multi-step action wizards with a stepper, nested routing, and per-step components using WizardView, WizardContainer, and WizardNavigation."
+keywords: ["wizardview", "wizard", "stepper", "multi-step", "nested routing", "react-declarative"]
+---
+
+The `WizardView` component in react-declarative provides a multi-step wizard UI backed by a stepper bar and nested routing. Each step is mapped to a route via `IWizardOutlet[]`, and each step's view receives navigation helpers through `IWizardOutletProps`. `WizardContainer` and `WizardNavigation` are companion components for structuring the content and navigation controls inside each step.
+
+## Overview
+
+```tsx
+import {
+  WizardView,
+  WizardNavigation,
+  WizardContainer,
+  type IWizardStep,
+  type IWizardOutlet,
+  type IWizardOutletProps,
+} from 'react-declarative';
+```
+
+## IWizardStep interface
+
+Each step in the stepper bar is described by an `IWizardStep` object.
+
+```typescript
+interface IWizardStep<Payload = IAnything> {
+  id?: string;
+  label?: string;
+  icon?: React.ComponentType<any>;
+  isMatch?: (id: string) => boolean;
+  isVisible?: (payload: Payload) => boolean;
+  passthrough?: boolean;
+}
+```
+
+| Field | Description |
+|---|---|
+| `id` | Unique identifier; matched against `IWizardOutlet.id` to mark the active step. |
+| `label` | Text label displayed in the stepper. |
+| `icon` | Optional icon rendered inside the step circle. |
+| `isMatch` | Custom route-matching predicate, used when step id and outlet id differ. |
+| `isVisible` | Controls whether the step is rendered in the stepper at all. |
+| `passthrough` | When `true`, the step is skipped during sequential navigation. |
+
+## IWizardOutlet interface
+
+Each outlet binds a step id to a view component and an `isActive` route predicate.
+
+```typescript
+interface IWizardOutlet<Data = IAnything, Payload = IAnything> {
+  id: string;
+  element: (props: IWizardOutletProps<Data, Payload>) => React.ReactElement;
+  isActive: (pathname: string) => boolean | null | undefined;
+}
+```
+
+## IWizardOutletProps interface
+
+The `element` component in each outlet receives these props:
+
+```typescript
+// Combines IOutletProps with WizardView-specific fields
+type IWizardOutletProps<Data, Payload, Props = {}> =
+  IOutletProps<Data, Payload, Props> & {
+    size: ISize;
+    loading: boolean;
+    setLoading: (loading: boolean) => void;
+    progress: number;
+    setProgress: (progress: number) => void;
+    onClose: () => void;
+    // IOutletProps provides:
+    history: { replace: (path: string) => void };
+    data: Data;
+    payload: Payload;
+  };
+```
+
+<Note>
+  Use `history.replace(path)` inside outlet components to advance the wizard without adding a browser history entry. This keeps the back button behavior clean.
+</Note>
+
+## Full wizard example
+
+<CodeGroup>
+
+```tsx steps-and-routes.tsx
+const steps: IWizardStep[] = [
+  {
+    id: "select",
+    label: "Choose file",
+  },
+  {
+    id: "validate",
+    label: "Validation",
+  },
+  {
+    id: "import",
+    label: "Import",
+  },
+];
+
+const routes: IWizardOutlet[] = [
+  {
+    id: "select",
+    element: SelectFileView,
+    isActive: (pathname) => !!parseRouteUrl("/select-file", pathname),
+  },
+  {
+    id: "validate",
+    element: ValidateFileView,
+    isActive: (pathname) => !!parseRouteUrl("/validate-file", pathname),
+  },
+  {
+    id: "import",
+    element: ImportFileView,
+    isActive: (pathname) => !!parseRouteUrl("/import-file", pathname),
+  },
+];
+```
+
+```tsx wizard-view.tsx
+<WizardView
+  pathname="/select-file"
+  steps={steps}
+  routes={routes}
+/>
+```
+
+```tsx select-file-view.tsx
+const SelectFileView = ({
+  history,
+}: IWizardOutletProps) => {
+  return (
+    <WizardContainer
+      Navigation={
+        <WizardNavigation
+          hasNext
+          onNext={() => history.replace("/validate-file")}
+        />
+      }
+    >
+      <p>Choose a file to import</p>
+    </WizardContainer>
+  );
+};
+```
+
+</CodeGroup>
+
+## Configuration steps
+
+<Steps>
+  <Step title="Define steps">
+    Create the `IWizardStep[]` array. Each entry maps to a circle in the stepper bar. The `id` must match the corresponding outlet `id`.
+
+    ```tsx
+    const steps: IWizardStep[] = [
+      { id: 'select',   label: 'Choose file' },
+      { id: 'validate', label: 'Validation' },
+      { id: 'import',   label: 'Import' },
+    ];
+    ```
+  </Step>
+
+  <Step title="Define outlets">
+    Create the `IWizardOutlet[]` array. Each outlet binds a step to a view component and a route predicate.
+
+    ```tsx
+    const routes: IWizardOutlet[] = [
+      {
+        id: 'select',
+        element: SelectFileView,
+        isActive: (pathname) => !!parseRouteUrl('/select-file', pathname),
+      },
+    ];
+    ```
+  </Step>
+
+  <Step title="Render WizardView">
+    Pass the current pathname, steps, and routes. The wizard resolves the active step automatically using the `isActive` predicates.
+
+    ```tsx
+    <WizardView
+      pathname={currentPathname}
+      steps={steps}
+      routes={routes}
+    />
+    ```
+  </Step>
+
+  <Step title="Build step views">
+    Each outlet's `element` receives `IWizardOutletProps`. Wrap content in `WizardContainer` and provide a `WizardNavigation` component to handle next/previous routing.
+
+    ```tsx
+    const ValidateFileView = ({ history, setLoading }: IWizardOutletProps) => {
+      const handleNext = async () => {
+        setLoading(true);
+        await validateFile();
+        setLoading(false);
+        history.replace('/import-file');
+      };
+
+      return (
+        <WizardContainer
+          Navigation={
+            <WizardNavigation
+              hasBack
+              hasNext
+              onBack={() => history.replace('/select-file')}
+              onNext={handleNext}
+            />
+          }
+        >
+          <ValidationResults />
+        </WizardContainer>
+      );
+    };
+    ```
+  </Step>
+</Steps>
+
+## WizardNavigation props
+
+| Prop | Type | Description |
+|---|---|---|
+| `hasNext` | `boolean` | Renders the "Next" button. |
+| `hasBack` | `boolean` | Renders the "Back" button. |
+| `onNext` | `() => void` | Called when the "Next" button is clicked. |
+| `onBack` | `() => void` | Called when the "Back" button is clicked. |
+
+## Progress and loading
+
+Outlet components can signal asynchronous work in progress using `setLoading` and `setProgress`:
+
+```tsx
+const ImportFileView = ({ setLoading, setProgress, history }: IWizardOutletProps) => {
+  const handleImport = async () => {
+    setLoading(true);
+    for (let i = 0; i <= 100; i += 10) {
+      await doImportBatch(i);
+      setProgress(i);
+    }
+    setLoading(false);
+    history.replace('/done');
+  };
+
+  return (
+    <WizardContainer
+      Navigation={
+        <WizardNavigation hasNext onNext={handleImport} />
+      }
+    >
+      <p>Ready to import</p>
+    </WizardContainer>
+  );
+};
+```
+
+<Tip>
+  `setProgress` maps to a 0–100 value that `WizardView` feeds into a `LinearProgress` bar in the stepper header, giving users clear feedback during long-running steps.
+</Tip>

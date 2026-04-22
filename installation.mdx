@@ -1,0 +1,141 @@
+---
+title: "Installing react-declarative and its peer dependencies"
+description: "Step-by-step install instructions for react-declarative, all required MUI and emotion peer deps, and optional lightweight or lite variants."
+---
+
+react-declarative is built on top of MUI v5 and requires several peer dependencies to be present in your project. This page lists every required package, explains the role each one plays, and shows install commands for npm, yarn, and pnpm.
+
+## Required peer dependencies
+
+The following packages must be installed alongside react-declarative. They are listed as `peerDependencies` in `package.json` and will not be bundled automatically.
+
+| Package | Version | Purpose |
+|---|---|---|
+| `@emotion/react` | `^11.8.1` | CSS-in-JS runtime required by MUI |
+| `@emotion/styled` | `^11.8.1` | Styled component API for MUI |
+| `@mui/icons-material` | `^5.5.0` | Material icons used by built-in field components |
+| `@mui/material` | `^5.5.0` | MUI component library — the rendering foundation |
+| `@mui/system` | `^5.5.0` | MUI system utilities and `sx` prop support |
+| `file-type` | `^19.0.0` | MIME-type detection for the `FieldType.File` field |
+| `react` | `^17.0.0 \|\| ^18.0.0` | React runtime |
+| `react-dom` | `^17.0.0 \|\| ^18.0.0` | React DOM renderer |
+| `tss-react` | `>=4.3.4` | Type-safe CSS-in-JS layer used internally for styles |
+
+<Note>
+  react-declarative supports both React 17 and React 18, including React 18's concurrent rendering mode. React 18 is recommended for new projects.
+</Note>
+
+## Install commands
+
+<CodeGroup>
+
+```bash npm
+npm install --save react-declarative tss-react @mui/material @mui/icons-material @mui/system @emotion/react @emotion/styled
+```
+
+```bash yarn
+yarn add react-declarative tss-react @mui/material @mui/icons-material @mui/system @emotion/react @emotion/styled
+```
+
+```bash pnpm
+pnpm add react-declarative tss-react @mui/material @mui/icons-material @mui/system @emotion/react @emotion/styled
+```
+
+</CodeGroup>
+
+<Info>
+  `file-type` and `react`/`react-dom` are almost always already present in a React project. If you are starting from scratch, add them explicitly:
+
+  ```bash
+  npm install --save react react-dom file-type
+  ```
+</Info>
+
+## Create React App template
+
+The fastest way to start a new project with everything pre-configured is the official `cra-template-react-declarative` template. It installs all peer dependencies, sets up a working `ThemeProvider`, and includes a sample form so you can start editing immediately.
+
+<CodeGroup>
+
+```bash yarn
+yarn create react-app --template cra-template-react-declarative .
+```
+
+```bash npx
+npx create-react-app . --template=react-declarative
+```
+
+</CodeGroup>
+
+The generated project includes a `src/index.tsx` that wraps the app in `ThemeProvider`, `ModalProvider`, and `SnackProvider` — all required for modal dialogs and snack notifications to work correctly:
+
+```tsx
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { createTheme, ThemeProvider } from "@mui/material/styles";
+import { ModalProvider, SnackProvider } from "react-declarative";
+import App from "./App";
+
+const theme = createTheme();
+const container = document.getElementById("root")!;
+
+const root = createRoot(container);
+
+root.render(
+  <ThemeProvider theme={theme}>
+    <ModalProvider>
+      <SnackProvider>
+        <App />
+      </SnackProvider>
+    </ModalProvider>
+  </ThemeProvider>
+);
+```
+
+## Lightweight variant: react-declarative-lite
+
+If you want to add `<One />` forms to an existing MUI application without pulling in the full library — which includes data grids, kanban, wizard views, and other heavy components — use the `react-declarative-lite` package instead.
+
+```bash
+npm install --save react-declarative-lite
+```
+
+`react-declarative-lite` ships only the `<One />` form engine and its direct dependencies. The API is identical to the full package for `One`-related imports, so you can migrate to the full package later without changing your code.
+
+<Tip>
+  `react-declarative-lite` is the right choice when you are adding form functionality to an existing project and want to keep your bundle size small.
+</Tip>
+
+## Verifying the installation
+
+After installing, import `FieldType` and `One` and render a minimal form to confirm everything is wired up correctly:
+
+```tsx
+import React from "react";
+import { One, FieldType, TypedField } from "react-declarative";
+
+const fields: TypedField[] = [
+  {
+    type: FieldType.Text,
+    name: "hello",
+    title: "Hello world",
+  },
+];
+
+export const TestForm = () => (
+  <One fields={fields} handler={{}} onChange={console.log} />
+);
+```
+
+If the text field renders without errors, the installation is complete.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build a working form with validation from scratch
+  </Card>
+  <Card title="Field types" icon="list-check" href="/form-engine/field-types">
+    Explore all 20+ available field types
+  </Card>
+</CardGroup>

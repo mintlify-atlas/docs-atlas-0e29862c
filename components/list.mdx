@@ -1,0 +1,295 @@
+---
+title: "List and ListTyped: Data Grid Components"
+description: "Build adaptive, JSON-configured data grids with filtering, sorting, pagination, row actions, chips, and built-in mobile support using List and ListTyped."
+keywords: ["list", "listtyped", "data grid", "columns", "filters", "pagination", "react-declarative"]
+---
+
+The `List` and `ListTyped` components in react-declarative provide a fully adaptive, JSON-configurable data grid with built-in support for mobile layouts, search, pagination, row-level actions, bulk operations, and filter chips. All configuration is expressed as plain TypeScript arrays—no custom renderers required for common patterns.
+
+## Overview
+
+`ListTyped` is the primary variant and accepts typed `TypedField[]` for its filter panel. The untyped `List` accepts `IField[]`. Both share the same column, action, operation, chip, and row-action props.
+
+```tsx
+import {
+  ListTyped,
+  ActionType,
+  ColumnType,
+  type TypedField,
+  type IColumn,
+  type IListAction,
+  type IListOperation,
+  type IListChip,
+  type IListRowAction,
+} from 'react-declarative';
+```
+
+## ActionType enum
+
+Controls the toolbar button style for each `IListAction` entry.
+
+```typescript
+export enum ActionType {
+  Add  = 'add-action',  // FAB-style add button
+  Fab  = 'fab-action',  // Floating action button
+  Menu = 'menu-action', // Overflow menu item
+}
+```
+
+## ColumnType enum
+
+Determines the cell renderer for each `IColumn` entry.
+
+```typescript
+export enum ColumnType {
+  Text      = 'text-cell',      // Plain text field value
+  Action    = 'action-cell',    // Clickable action cell
+  CheckBox  = 'checkbox-cell',  // Boolean checkbox
+  Compute   = 'compute-cell',   // Derived value via compute()
+  Component = 'component-cell', // Custom React component via element
+}
+```
+
+## IColumn interface
+
+```typescript
+interface IColumn<FilterData = IAnything, RowData = IAnything, Payload = IAnything> {
+  type: ColumnType;
+  field?: string;
+  headerName?: string;
+  fullName?: string;
+  width: string | ((width: number) => string | number);
+  minHeight?: string | number;
+  primary?: boolean;
+  secondary?: boolean;
+  avatar?: boolean;
+  pin?: boolean;
+  description?: string;
+  fullWidth?: boolean;
+  sortable?: boolean;
+  phoneOrder?: number;
+  phoneHidden?: boolean;
+  tabletOrder?: number;
+  tabletHidden?: boolean;
+  desktopOrder?: number;
+  desktopHidden?: boolean;
+  columnMenu?: IListActionOption[];
+  isVisible?: (params: {
+    filterData: FilterData;
+    pagination: ListHandlerPagination;
+    sortModel: ListHandlerSortModel<RowData>;
+    chips: ListHandlerChips<RowData>;
+    search: string;
+    payload: Payload;
+  }) => boolean;
+  compute?: (row: RowData & { _payload: Payload }, payload: Payload) => Promise<Value> | Value;
+  serialize?: (row: RowData & { _payload: Payload }, payload: Payload) => Promise<Value> | Value;
+  element?: React.ComponentType<RowData & { _payload: Payload }>;
+  sx?: SxProps<any>;
+}
+```
+
+<Note>
+  The `width` prop accepts a callback receiving the grid's total available width, making it straightforward to define columns relative to the container: `width: (fullWidth) => Math.max(fullWidth - 650, 200)`.
+</Note>
+
+## IListAction interface
+
+```typescript
+interface IListAction<RowData = IAnything, Payload = IAnything> {
+  type: ActionType;
+  action?: string;
+  label?: string;
+  icon?: React.ComponentType<any>;
+  isVisible?: (selectedRows: RowData[], payload: Payload) => Promise<boolean> | boolean;
+  isDisabled?: (selectedRows: RowData[], payload: Payload) => Promise<boolean> | boolean;
+  options?: IListActionOption[];
+}
+```
+
+## IListOperation interface
+
+Operations appear as bulk-action buttons that activate when rows are selected.
+
+```typescript
+interface IListOperation<RowData = IAnything, Payload = IAnything> {
+  action: string;
+  label: string;
+  isAvailable?: ((rowIds: RowData[], isAll: boolean, payload: Payload) => boolean | Promise<boolean>) | boolean;
+}
+```
+
+## IListChip interface
+
+Chips render as toggleable filter pills below the main toolbar.
+
+```typescript
+interface IListChip<RowData = IAnything> {
+  name: keyof RowData;
+  label: string;
+  color?: string;
+  enabled?: boolean;
+}
+```
+
+## IListRowAction interface
+
+Row actions appear in a per-row context menu.
+
+```typescript
+interface IListRowAction<RowData = IAnything, Payload = IAnything> {
+  action: string;
+  label: string;
+  icon?: React.ComponentType<any>;
+  isVisible?: (row: RowData, payload: Payload) => Promise<boolean> | boolean;
+  isDisabled?: (row: RowData, payload: Payload) => Promise<boolean> | boolean;
+  enabled?: boolean;
+}
+```
+
+## Configuration steps
+
+<Steps>
+  <Step title="Define the filter fields">
+    Use `TypedField[]` to describe the filter bar. Any `FieldType` supported by the `One` form engine can be used here.
+
+    ```tsx
+    const filters: TypedField[] = [
+      {
+        type: FieldType.Text,
+        name: 'firstName',
+        title: 'First name',
+      },
+      {
+        type: FieldType.Text,
+        name: 'lastName',
+        title: 'Last name',
+      },
+    ];
+    ```
+  </Step>
+
+  <Step title="Define the columns">
+    Map your row data shape to `IColumn[]`. Use the `width` callback for responsive sizing.
+
+    ```tsx
+    const columns: IColumn[] = [
+      {
+        type: ColumnType.Text,
+        field: 'id',
+        headerName: 'ID',
+        width: (fullWidth) => Math.max(fullWidth - 650, 200),
+        columnMenu: [
+          {
+            action: 'test-action',
+            label: 'Column action',
+          },
+        ],
+      },
+    ];
+    ```
+  </Step>
+
+  <Step title="Define toolbar actions">
+    ```tsx
+    const actions: IListAction[] = [
+      {
+        type: ActionType.Add,
+        label: 'Create item',
+      },
+    ];
+    ```
+  </Step>
+
+  <Step title="Define bulk operations">
+    ```tsx
+    const operations: IListOperation[] = [
+      {
+        action: 'operation-one',
+        label: 'Operation one',
+      },
+    ];
+    ```
+  </Step>
+
+  <Step title="Define filter chips">
+    ```tsx
+    const chips: IListChip[] = [
+      {
+        label: 'The chip1_enabled is true',
+        name: 'chip1_enabled',
+        color: '#4caf50',
+      },
+    ];
+    ```
+  </Step>
+
+  <Step title="Define row actions">
+    ```tsx
+    const rowActions: IListRowAction[] = [
+      {
+        label: 'chip1',
+        action: 'chip1-action',
+        isVisible: ({ chip1_enabled }) => chip1_enabled,
+      },
+    ];
+    ```
+  </Step>
+</Steps>
+
+## Full ListTyped example
+
+This is the complete usage pattern from the react-declarative source:
+
+```tsx
+return (
+  <ListTyped
+    withMobile
+    withSearch
+    withArrowPagination
+    rowActions={rowActions}
+    actions={actions}
+    filters={filters}
+    columns={columns}
+    operations={operations}
+    chips={chips}
+  />
+);
+```
+
+## Key props
+
+| Prop | Type | Description |
+|---|---|---|
+| `withMobile` | `boolean` | Enables the adaptive mobile card layout. Columns with `phoneOrder`/`phoneHidden` are respected. |
+| `withSearch` | `boolean` | Shows a search input in the toolbar. The search string is passed to the `ListHandler`. |
+| `withArrowPagination` | `boolean` | Uses previous/next arrow buttons instead of a page-number bar. |
+| `filters` | `TypedField[]` | Fields rendered in the collapsible filter panel. |
+| `columns` | `IColumn[]` | Column definitions for the data table. |
+| `actions` | `IListAction[]` | Toolbar action buttons. |
+| `operations` | `IListOperation[]` | Bulk-selection operation buttons. |
+| `chips` | `IListChip[]` | Toggleable filter chips below the toolbar. |
+| `rowActions` | `IListRowAction[]` | Per-row context menu actions. |
+| `handler` | `ListHandler` | Async function or static array supplying row data. |
+
+## ListHandler
+
+The `handler` prop accepts either a static array or an async function receiving filter, pagination, sort, chips, search, and payload parameters:
+
+```tsx
+const handler: ListHandler<IFilterData, IRowData> = async (
+  filterData,
+  pagination,
+  sort,
+  chips,
+  search,
+  payload,
+) => {
+  const { rows, total } = await fetchRows({ filterData, pagination, sort, chips, search });
+  return { rows, total };
+};
+```
+
+<Tip>
+  Return `{ rows, total }` from the handler to enable server-side total-count pagination. Return a plain `RowData[]` array for client-side pagination.
+</Tip>

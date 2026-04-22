@@ -1,0 +1,563 @@
+---
+title: 'List Component API Reference — react-declarative'
+description: 'Full props reference for List and ListTyped: handlers, columns, filters, actions, operations, chips, pagination, and per-row callbacks.'
+keywords: ['List', 'ListTyped', 'datagrid', 'react-declarative', 'IListProps', 'IColumn']
+---
+
+The `<List />` component is the data-grid engine in react-declarative. It composes a paginated, sortable, filterable table from a declarative column schema and an async handler function. It supports toolbar actions, bulk operations, filter chips, per-row context actions, infinite scroll, mobile layout, and a tile/custom template mode. `<ListTyped />` is the generic-typed counterpart for TypeScript-first usage.
+
+## Import
+
+```tsx
+import { List, ListTyped } from 'react-declarative';
+```
+
+## Basic usage
+
+<CodeGroup>
+
+```tsx Simple read-only grid
+import { List, ColumnType } from 'react-declarative';
+
+const columns = [
+  { type: ColumnType.Text, field: 'name',  headerName: 'Name',  width: '200px' },
+  { type: ColumnType.Text, field: 'email', headerName: 'Email', width: '1' },
+];
+
+export default function UsersGrid() {
+  return (
+    <List
+      columns={columns}
+      handler={async () => fetchUsers()}
+      onRowClick={(row) => navigate(`/users/${row.id}`)}
+    />
+  );
+}
+```
+
+```tsx With filters, chips, and actions
+import { List, ColumnType, ActionType, FieldType } from 'react-declarative';
+
+const columns = [
+  { type: ColumnType.Text, field: 'name',   headerName: 'Name',   width: '200px' },
+  { type: ColumnType.Text, field: 'status', headerName: 'Status', width: '120px' },
+];
+
+const filters = [
+  { type: FieldType.Text, name: 'search', title: 'Search by name' },
+];
+
+const chips = [
+  { name: 'active',   label: 'Active',   enabled: true  },
+  { name: 'archived', label: 'Archived', enabled: false },
+];
+
+const actions = [
+  {
+    type: ActionType.Add,
+    action: 'create-user',
+    label: 'Add user',
+  },
+];
+
+export default function UsersGrid() {
+  return (
+    <List
+      columns={columns}
+      filters={filters}
+      chips={chips}
+      actions={actions}
+      handler={async (filterData, pagination, sort, chips, search) =>
+        fetchUsers({ ...filterData, ...pagination, sort, chips, search })
+      }
+      onAction={(action) => {
+        if (action === 'create-user') navigate('/users/new');
+      }}
+      withSearch
+    />
+  );
+}
+```
+
+</CodeGroup>
+
+## ListTyped generic variant
+
+`ListTyped<FilterData, RowData, Payload>` locks the handler signature and all callbacks to your specific row and filter types.
+
+```tsx
+import { ListTyped, ColumnType, TypedField, FieldType } from 'react-declarative';
+
+interface UserRow { id: string; name: string; email: string }
+interface UserFilter { search: string }
+
+const columns: IColumn<UserFilter, UserRow>[] = [
+  { type: ColumnType.Text, field: 'name',  headerName: 'Name',  width: '200px' },
+  { type: ColumnType.Text, field: 'email', headerName: 'Email', width: '1'     },
+];
+
+const filters: TypedField<UserFilter>[] = [
+  { type: FieldType.Text, name: 'search', title: 'Name' },
+];
+
+export default function UsersGrid() {
+  return (
+    <ListTyped<UserFilter, UserRow>
+      columns={columns}
+      filters={filters}
+      handler={async (data, pagination) => ({
+        rows: await fetchUsers(data, pagination),
+        total: await countUsers(data),
+      })}
+      onRowClick={(row: UserRow) => console.log(row.id)}
+    />
+  );
+}
+```
+
+## Props reference
+
+### Core
+
+<ParamField path="columns" type="IColumn[]" required>
+  Array of column definition objects. Each column must have at minimum a `type`
+  and `width`. See the [IColumn reference](#icolumn-type) below.
+</ParamField>
+
+<ParamField path="handler" type="ListHandler<FilterData, RowData, Payload>" required>
+  Data source for the grid. Can be a static `RowData[]` array or an async
+  function. When a function, it receives filter data, pagination, sort model,
+  active chips, the search string, and the payload.
+
+  ```typescript
+  type ListHandler<FilterData, RowData, Payload> =
+    | RowData[]
+    | ((
+        data: FilterData,
+        pagination: { limit: number; offset: number },
+        sort: IListSortItem<RowData>[],
+        chips: Partial<Record<keyof RowData, boolean>>,
+        search: string,
+        payload: Payload,
+      ) => Promise<ListHandlerResult<RowData>> | ListHandlerResult<RowData>);
+  ```
+
+  Return either a raw `RowData[]` or `{ rows: RowData[]; total: number | null }`.
+  When you return `total`, the component uses it for pagination display.
+</ParamField>
+
+<ParamField path="filters" type="TypedField[]">
+  Field schema array rendered in the filter panel, using the same `TypedField`
+  format as `<One />`. Filter values are passed as the first argument to
+  `handler`.
+</ParamField>
+
+<ParamField path="payload" type="Payload | (() => Payload)">
+  Arbitrary value forwarded to `handler` and all action callbacks. Useful for
+  injecting auth tokens, user roles, or API clients without polluting the
+  column/filter schema.
+</ParamField>
+
+### Actions & operations
+
+<ParamField path="actions" type="IListAction[]">
+  Toolbar action buttons rendered above the grid. Each action has a `type`
+  (`ActionType.Add`, `ActionType.Fab`, or `ActionType.Menu`), an optional
+  `label`, an optional `icon`, and an optional `options` array for dropdown
+  menus.
+
+  <Expandable title="IListAction properties">
+    <ParamField path="type" type="ActionType" required>
+      `ActionType.Add` — primary add button. `ActionType.Fab` — floating action
+      button. `ActionType.Menu` — icon button that opens a dropdown menu.
+    </ParamField>
+    <ParamField path="action" type="string">
+      Action identifier string passed to `onAction` when the user clicks.
+    </ParamField>
+    <ParamField path="label" type="string">
+      Button label text.
+    </ParamField>
+    <ParamField path="icon" type="React.ComponentType">
+      MUI icon component displayed on the button.
+    </ParamField>
+    <ParamField path="isVisible" type="(selectedRows: RowData[], payload: Payload) => boolean | Promise<boolean>">
+      Callback to conditionally hide the action.
+    </ParamField>
+    <ParamField path="isDisabled" type="(selectedRows: RowData[], payload: Payload) => boolean | Promise<boolean>">
+      Callback to conditionally disable the action.
+    </ParamField>
+    <ParamField path="options" type="IListActionOption[]">
+      Dropdown menu items for `ActionType.Menu` actions.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="operations" type="IListOperation[]">
+  Bulk operation buttons that appear when rows are selected. Each operation
+  extends `IOption` with an `isAvailable` callback.
+
+  <Expandable title="IListOperation properties">
+    <ParamField path="action" type="string" required>
+      Operation identifier passed to `onOperation`.
+    </ParamField>
+    <ParamField path="label" type="string">
+      Button label text.
+    </ParamField>
+    <ParamField path="isAvailable" type="(rowIds: RowData[], isAll: boolean, payload: Payload) => boolean | Promise<boolean>">
+      Determines whether the operation is available given the current selection.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="rowActions" type="IListRowAction[]">
+  Per-row context menu actions. Rendered as a kebab menu or inline icon at the
+  end of each row.
+
+  <Expandable title="IListRowAction properties">
+    <ParamField path="action" type="string" required>
+      Action identifier passed to `onRowAction`.
+    </ParamField>
+    <ParamField path="label" type="string">
+      Menu item label.
+    </ParamField>
+    <ParamField path="enabled" type="boolean">
+      When `false`, the action is rendered as disabled unconditionally.
+    </ParamField>
+    <ParamField path="isVisible" type="(row: RowData, payload: Payload) => boolean | Promise<boolean>">
+      Per-row visibility callback.
+    </ParamField>
+    <ParamField path="isDisabled" type="(row: RowData, payload: Payload) => boolean | Promise<boolean>">
+      Per-row disabled callback.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="chips" type="IListChip[]">
+  Filter chip definitions rendered in a chip bar above the grid. Each chip
+  toggles a boolean filter key that is passed to `handler`.
+
+  <Expandable title="IListChip properties">
+    <ParamField path="name" type="keyof RowData" required>
+      The key in the chips map this chip controls.
+    </ParamField>
+    <ParamField path="label" type="string" required>
+      Display label for the chip.
+    </ParamField>
+    <ParamField path="color" type="string">
+      Chip background color (CSS color string).
+    </ParamField>
+    <ParamField path="enabled" type="boolean" default="false">
+      Whether the chip is active by default.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Callbacks
+
+<ParamField path="onRowClick" type="(row: RowData, reload: (keepPagination?: boolean) => Promise<void>) => void">
+  Called when the user clicks a row. The second argument is a `reload` function
+  you can call to refresh the list after a side-effect.
+</ParamField>
+
+<ParamField path="onRowAction" type="(action: string, row: RowData, reload: (keepPagination?: boolean) => Promise<void>) => void">
+  Called when a row action is triggered. `action` is the string set on the
+  `IListRowAction` entry.
+</ParamField>
+
+<ParamField path="onAction" type="(action: string, selectedRows: RowData[], reload: (keepPagination?: boolean) => Promise<void>) => void">
+  Called when a toolbar action is triggered. `selectedRows` contains the
+  currently checked rows.
+</ParamField>
+
+<ParamField path="onOperation" type="(action: string, selectedRows: RowData[], isAll: boolean, reload: (keepPagination?: boolean) => Promise<void>) => void">
+  Called when a bulk operation button is clicked. `isAll` is `true` when the
+  user selected all rows across all pages.
+</ParamField>
+
+<ParamField path="onColumnAction" type="(field: string, action: string, selectedRows: RowData[], reload: (keepPagination?: boolean) => Promise<void>) => void">
+  Called when a column header menu action is triggered.
+</ParamField>
+
+<ParamField path="onSelectedRows" type="(rowIds: RowId[], initialChange: boolean) => void">
+  Called when the row selection changes.
+</ParamField>
+
+<ParamField path="onFilterChange" type="(data: FilterData) => void">
+  Called when filter form values change.
+</ParamField>
+
+<ParamField path="onSearchChange" type="(search: string) => void">
+  Called when the search input value changes.
+</ParamField>
+
+<ParamField path="onSortModelChange" type="(sort: IListSortItem[]) => void">
+  Called when the user changes the sort column or direction.
+</ParamField>
+
+<ParamField path="onChipsChange" type="(data: ListHandlerChips<RowData>) => void">
+  Called when the active chip set changes.
+</ParamField>
+
+<ParamField path="onRows" type="(rows: RowData[]) => void">
+  Called after each successful data load with the current page of rows.
+</ParamField>
+
+<ParamField path="onPageChange" type="(page: number) => void">
+  Called when the user navigates to a different page.
+</ParamField>
+
+<ParamField path="onLimitChange" type="(limit: number) => void">
+  Called when the rows-per-page value changes.
+</ParamField>
+
+<ParamField path="onLoadStart" type="(source: string) => void">
+  Called when a fetch begins.
+</ParamField>
+
+<ParamField path="onLoadEnd" type="(isOk: boolean, source: string) => void">
+  Called when a fetch completes. `isOk` is `false` on error.
+</ParamField>
+
+<ParamField path="fallback" type="(e: Error) => void">
+  Error handler called when `handler` throws or rejects.
+</ParamField>
+
+### Feature flags
+
+<ParamField path="withSearch" type="boolean" default="false">
+  Renders a search text input above the grid. The search string is passed to
+  `handler` as the fifth argument.
+</ParamField>
+
+<ParamField path="withMobile" type="boolean" default="false">
+  Enables the mobile-optimised card layout on small viewports.
+</ParamField>
+
+<ParamField path="withArrowPagination" type="boolean" default="false">
+  Replaces the default numbered pagination with simple previous/next arrow
+  buttons.
+</ParamField>
+
+<ParamField path="withRangePagination" type="boolean" default="false">
+  Enables a range-style pagination control.
+</ParamField>
+
+<ParamField path="withCheckbox" type="boolean">
+  Adds a selection checkbox column. Required for `operations` to work.
+</ParamField>
+
+<ParamField path="withSelectOnRowClick" type="boolean" default="false">
+  Selects a row when it is clicked, in addition to calling `onRowClick`.
+</ParamField>
+
+<ParamField path="withLoader" type="boolean" default="false">
+  Shows an overlay spinner during data fetches.
+</ParamField>
+
+<ParamField path="withHideIfEmpty" type="boolean" default="false">
+  Hides the entire grid when there are no rows and no active filters.
+</ParamField>
+
+<ParamField path="withSingleSort" type="boolean" default="false">
+  Restricts sorting to a single column at a time.
+</ParamField>
+
+<ParamField path="withSingleChip" type="boolean" default="false">
+  Allows only one chip to be active at a time.
+</ParamField>
+
+<ParamField path="withToggledFilters" type="boolean" default="false">
+  Collapses the filter panel by default, showing a toggle button instead.
+</ParamField>
+
+<ParamField path="withAllListOperations" type="boolean" default="false">
+  Makes the "select all" checkbox cover all rows across all pages.
+</ParamField>
+
+<ParamField path="withInitialLoader" type="boolean" default="false">
+  Shows the loading skeleton on the very first render before any data arrives.
+</ParamField>
+
+<ParamField path="isInfinite" type="boolean" default="false">
+  Switches to infinite-scroll mode instead of page-based pagination.
+</ParamField>
+
+<ParamField path="isDense" type="boolean" default="false">
+  Reduces row height for a denser table presentation.
+</ParamField>
+
+### Pagination & selection
+
+<ParamField path="limit" type="number" default="25">
+  Initial number of rows per page.
+</ParamField>
+
+<ParamField path="page" type="number" default="0">
+  Initial page index (zero-based).
+</ParamField>
+
+<ParamField path="rowsPerPage" type="Array<number | { value: number; label: string }>">
+  Options shown in the rows-per-page selector.
+</ParamField>
+
+<ParamField path="selectionMode" type="SelectionMode">
+  Row selection behaviour: `SelectionMode.Single`, `SelectionMode.Multiple`,
+  or `SelectionMode.None`.
+</ParamField>
+
+<ParamField path="selectedRows" type="RowId[]">
+  Controlled selected row IDs. Pair with `onSelectedRows` for fully controlled
+  selection state.
+</ParamField>
+
+<ParamField path="selectionLabel" type="(size: number) => string | Promise<string>">
+  Custom label generator for the selection count indicator (e.g. "3 users
+  selected").
+</ParamField>
+
+### Appearance & layout
+
+<ParamField path="title" type="string">
+  Grid title rendered above the toolbar.
+</ParamField>
+
+<ParamField path="filterLabel" type="string">
+  Label displayed on the filter panel toggle button.
+</ParamField>
+
+<ParamField path="className" type="string">
+  CSS class applied to the root list element.
+</ParamField>
+
+<ParamField path="style" type="React.CSSProperties">
+  Inline styles applied to the root element.
+</ParamField>
+
+<ParamField path="itemSx" type="SxProps">
+  MUI `sx` prop applied to each row container.
+</ParamField>
+
+<ParamField path="denseHeight" type="number">
+  Row height in pixels when `isDense` is enabled.
+</ParamField>
+
+<ParamField path="rowMark" type="((row: RowData) => string) | ((row: RowData) => Promise<string>)">
+  Returns a CSS color string used to draw a colour mark on the left edge of
+  the row.
+</ParamField>
+
+<ParamField path="rowColor" type="((row: RowData) => string) | ((row: RowData) => Promise<string>)">
+  Returns a CSS color string used as the row background color.
+</ParamField>
+
+<ParamField path="isRowDisabled" type="(row: RowData, params: {...}) => boolean">
+  Disables interaction for a specific row. The second argument includes the
+  current `filterData`, `pagination`, `sortModel`, `chips`, `search`, and
+  `payload`.
+</ParamField>
+
+<ParamField path="withOutlinePaper" type="boolean" default="false">
+  Renders the grid in an outlined card container.
+</ParamField>
+
+<ParamField path="withTransparentPaper" type="boolean" default="false">
+  Removes the card background and elevation.
+</ParamField>
+
+<ParamField path="apiRef" type="Ref<IListApi>">
+  Ref that receives an imperative handle for programmatically triggering
+  reloads, resetting filters, and reading list state.
+</ParamField>
+
+## IColumn type
+
+Each entry in the `columns` array must implement `IColumn`.
+
+<ParamField path="type" type="ColumnType" required>
+  Determines how the cell renders. See the `ColumnType` enum:
+  - `ColumnType.Text` — renders the raw field value as text
+  - `ColumnType.Compute` — renders the return value of `compute`
+  - `ColumnType.Component` — renders a custom React component via `element`
+  - `ColumnType.Action` — renders an action button
+  - `ColumnType.CheckBox` — renders a checkbox cell
+</ParamField>
+
+<ParamField path="field" type="string">
+  Key of the row data object to display. Required for `ColumnType.Text` and
+  used as the sort key for sortable columns.
+</ParamField>
+
+<ParamField path="headerName" type="string">
+  Column header label. Falls back to `field` if omitted.
+</ParamField>
+
+<ParamField path="width" type="string | ((containerWidth: number) => string | number)" required>
+  Column width. Pass a CSS value (`"200px"`, `"20%"`) or `"1"` to use flex
+  grow. A function receives the container width and should return a CSS value
+  or a pixel number.
+</ParamField>
+
+<ParamField path="sortable" type="boolean" default="false">
+  Enables sorting on this column. Clicking the header cycles through ascending,
+  descending, and unsorted states.
+</ParamField>
+
+<ParamField path="compute" type="(row: RowData & { _payload: Payload }, payload: Payload) => Promise<Value> | Value">
+  Derives the displayed cell value from the row. Used with `ColumnType.Compute`.
+</ParamField>
+
+<ParamField path="element" type="React.ComponentType<RowData & { _payload: Payload }>">
+  Custom cell component. Used with `ColumnType.Component`. Receives the full
+  row data as props, plus a `_payload` prop.
+</ParamField>
+
+<ParamField path="serialize" type="(row: RowData & { _payload: Payload }, payload: Payload) => Promise<Value> | Value">
+  Converts a cell value to text for CSV/clipboard export.
+</ParamField>
+
+<ParamField path="isVisible" type="(params: {...}) => boolean">
+  Hides the column conditionally based on the current filter state, pagination,
+  sort model, chips, search string, and payload.
+</ParamField>
+
+<ParamField path="columnMenu" type="IListActionOption[]">
+  Context-menu options displayed in the column header dropdown.
+</ParamField>
+
+<ParamField path="primary" type="boolean" default="false">
+  Marks this column as the primary display column in mobile card layout.
+</ParamField>
+
+<ParamField path="secondary" type="boolean" default="false">
+  Marks this column as the secondary display column in mobile card layout.
+</ParamField>
+
+<ParamField path="avatar" type="boolean" default="false">
+  Renders this column as an avatar image in mobile card layout.
+</ParamField>
+
+<ParamField path="pin" type="boolean" default="false">
+  Pins the column to the left edge so it stays visible during horizontal
+  scrolling.
+</ParamField>
+
+<ParamField path="phoneHidden" type="boolean" default="false">
+  Hides this column on phone-sized viewports.
+</ParamField>
+
+<ParamField path="tabletHidden" type="boolean" default="false">
+  Hides this column on tablet-sized viewports.
+</ParamField>
+
+<ParamField path="desktopHidden" type="boolean" default="false">
+  Hides this column on desktop-sized viewports.
+</ParamField>
+
+<ParamField path="sx" type="SxProps">
+  MUI `sx` prop applied to each cell in this column.
+</ParamField>
+
+<Note>
+  The `phoneOrder`, `tabletOrder`, and `desktopOrder` props control column
+  rendering order on each breakpoint in mobile card mode.
+</Note>

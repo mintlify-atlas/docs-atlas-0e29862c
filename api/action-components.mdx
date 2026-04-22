@@ -1,0 +1,472 @@
+---
+title: "Action Components Reference — react-declarative"
+description: "Props and usage for every Action* component: async-aware buttons, icons, FABs, menus, toggles, chips, filters, modals, and animation state helpers."
+---
+
+react-declarative's Action components share a common contract: `onClick` (or equivalent) may return a `Promise`, and the component automatically enters a `loading` state for the duration of that promise. Error handling, load-lifecycle callbacks, and disabled states are built-in. This page documents every exported `Action*` component.
+
+## Buttons
+
+<AccordionGroup>
+
+<Accordion title="ActionButton — async-aware button">
+
+A Material UI `Button` wrapper that tracks promise resolution and displays a spinner inline while loading.
+
+```tsx
+import { ActionButton } from 'react-declarative';
+
+<ActionButton
+  variant="contained"
+  onClick={async (e) => {
+    await saveRecord();
+  }}
+  onLoadEnd={(isOk) => {
+    if (!isOk) showError();
+  }}
+>
+  Save
+</ActionButton>
+```
+
+<ParamField path="onClick" type="(event: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>">
+  Click handler. Returning a `Promise` causes the button to show a spinner until the promise settles.
+</ParamField>
+
+<ParamField path="onLoadStart" type="() => void">
+  Called immediately before the async operation starts.
+</ParamField>
+
+<ParamField path="onLoadEnd" type="(isOk: boolean) => void">
+  Called after the operation completes. `isOk` is `false` if the promise rejected.
+</ParamField>
+
+<ParamField path="fallback" type="(e: Error) => void">
+  Error handler invoked when `throwError` is `false` (the default).
+</ParamField>
+
+<ParamField path="throwError" type="boolean" default="false">
+  When `true`, errors propagate to the nearest error boundary instead of calling `fallback`.
+</ParamField>
+
+<ParamField path="Progress" type="React.ComponentType<{ loading: boolean; children: React.ReactNode }>">
+  Override the default inline spinner layout.
+</ParamField>
+
+All remaining props are forwarded to Material UI's `Button`.
+
+</Accordion>
+
+<Accordion title="ActionIcon — async-aware icon button">
+
+Wraps Material UI's `IconButton`. Same async contract as `ActionButton`.
+
+```tsx
+import { ActionIcon } from 'react-declarative';
+import DeleteIcon from '@mui/icons-material/Delete';
+
+<ActionIcon
+  onClick={async () => {
+    await deleteItem(id);
+  }}
+>
+  <DeleteIcon />
+</ActionIcon>
+```
+
+<ParamField path="onClick" type="(event: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>">
+  Click handler; returning a `Promise` triggers the loading indicator.
+</ParamField>
+
+<ParamField path="onLoadStart" type="() => void">
+  Fired before the async operation.
+</ParamField>
+
+<ParamField path="onLoadEnd" type="(isOk: boolean) => void">
+  Fired after the async operation. `isOk` reflects success.
+</ParamField>
+
+<ParamField path="fallback" type="(e: Error) => void">
+  Optional error handler.
+</ParamField>
+
+<ParamField path="disabled" type="boolean">
+  Disables the button. Automatically set to `true` while loading.
+</ParamField>
+
+</Accordion>
+
+<Accordion title="ActionFab — floating action button">
+
+A Material UI `Fab` (Floating Action Button) with the same async pattern.
+
+```tsx
+import { ActionFab } from 'react-declarative';
+import AddIcon from '@mui/icons-material/Add';
+
+<ActionFab
+  color="primary"
+  onClick={async () => {
+    await createItem();
+  }}
+>
+  <AddIcon />
+</ActionFab>
+```
+
+<ParamField path="onClick" type="(event: React.MouseEvent) => void | Promise<void>">
+  Async-aware click handler.
+</ParamField>
+
+<ParamField path="color" type="'primary' | 'secondary' | 'default'">
+  FAB color theme.
+</ParamField>
+
+<ParamField path="size" type="'small' | 'medium' | 'large'">
+  FAB size.
+</ParamField>
+
+<ParamField path="onLoadStart" type="() => void">
+  Pre-operation callback.
+</ParamField>
+
+<ParamField path="onLoadEnd" type="(isOk: boolean) => void">
+  Post-operation callback.
+</ParamField>
+
+</Accordion>
+
+</AccordionGroup>
+
+## Menus & Selectors
+
+<AccordionGroup>
+
+<Accordion title="ActionMenu — dropdown menu button">
+
+Renders a button that opens a dropdown menu of labeled options. Each option's `action` string is passed to `onAction`.
+
+```tsx
+import { ActionMenu } from 'react-declarative';
+
+<ActionMenu
+  options={[
+    { action: 'edit', label: 'Edit' },
+    { action: 'delete', label: 'Delete', isDisabled: () => !canDelete },
+  ]}
+  onAction={async (action) => {
+    if (action === 'delete') await deleteItem();
+  }}
+>
+  Actions
+</ActionMenu>
+```
+
+<ParamField path="options" type="IOption[]">
+  Menu items. Each item has `action: string`, `label: string`, and optional `isDisabled`, `isVisible` predicate functions.
+</ParamField>
+
+<ParamField path="onAction" type="(action: string) => void | Promise<void>">
+  Called when a menu item is selected. Returning a `Promise` blocks re-opening until it settles.
+</ParamField>
+
+<ParamField path="payload" type="any">
+  Passed to `isDisabled` / `isVisible` predicates.
+</ParamField>
+
+<ParamField path="fallback" type="(e: Error) => void">
+  Error handler for rejected promises.
+</ParamField>
+
+</Accordion>
+
+<Accordion title="ActionToggle — toggle button">
+
+A button that switches between two states, with optional async side-effects on toggle.
+
+```tsx
+import { ActionToggle } from 'react-declarative';
+
+<ActionToggle
+  value={isActive}
+  onChange={async (next) => {
+    await updateActiveState(next);
+  }}
+  label="Active"
+/>
+```
+
+<ParamField path="value" type="boolean">
+  Current toggle state.
+</ParamField>
+
+<ParamField path="onChange" type="(value: boolean) => void | Promise<void>">
+  Called with the new value when toggled. Returning a `Promise` shows loading state.
+</ParamField>
+
+<ParamField path="label" type="string">
+  Label text displayed next to the toggle.
+</ParamField>
+
+<ParamField path="disabled" type="boolean">
+  Disables the toggle.
+</ParamField>
+
+</Accordion>
+
+<Accordion title="ActionChip — chip button">
+
+A Material UI `Chip` that fires an async callback when clicked or deleted.
+
+```tsx
+import { ActionChip } from 'react-declarative';
+
+<ActionChip
+  label="Approve"
+  onClick={async () => {
+    await approveItem(id);
+  }}
+/>
+```
+
+<ParamField path="label" type="string">
+  Chip label text.
+</ParamField>
+
+<ParamField path="onClick" type="() => void | Promise<void>">
+  Async-aware click handler.
+</ParamField>
+
+<ParamField path="onDelete" type="() => void | Promise<void>">
+  Called when the delete icon is clicked.
+</ParamField>
+
+<ParamField path="fallback" type="(e: Error) => void">
+  Error handler.
+</ParamField>
+
+</Accordion>
+
+</AccordionGroup>
+
+## Filters & Triggers
+
+<AccordionGroup>
+
+<Accordion title="ActionFilter — filter button">
+
+Renders a filter button with a dropdown or panel that emits structured filter data.
+
+```tsx
+import { ActionFilter } from 'react-declarative';
+
+<ActionFilter
+  value={filters}
+  onChange={(filters) => setFilters(filters)}
+  data={filterConfig}
+/>
+```
+
+<ParamField path="data" type="IActionFilter[]">
+  Filter field configuration array.
+</ParamField>
+
+<ParamField path="value" type="Record<string, any>">
+  Current filter values.
+</ParamField>
+
+<ParamField path="onChange" type="(value: Record<string, any>) => void">
+  Called when filter values change.
+</ParamField>
+
+</Accordion>
+
+<Accordion title="ActionTrigger — trigger with data">
+
+Fires an action with structured payload data. Useful for associating a button with a specific data row or context.
+
+```tsx
+import { ActionTrigger } from 'react-declarative';
+
+<ActionTrigger
+  action="process"
+  data={{ id: row.id }}
+  onAction={async (action, data) => {
+    await processItem(data.id);
+  }}
+>
+  Process
+</ActionTrigger>
+```
+
+<ParamField path="action" type="string">
+  Action identifier forwarded to `onAction`.
+</ParamField>
+
+<ParamField path="data" type="T">
+  Arbitrary payload forwarded to `onAction`.
+</ParamField>
+
+<ParamField path="onAction" type="(action: string, data: T) => void | Promise<void>">
+  Called when the trigger fires.
+</ParamField>
+
+</Accordion>
+
+<Accordion title="ActionGroup — action group container">
+
+Groups multiple action buttons with consistent spacing and shared loading state management.
+
+```tsx
+import { ActionGroup, ActionButton } from 'react-declarative';
+
+<ActionGroup>
+  <ActionButton onClick={handleSave}>Save</ActionButton>
+  <ActionButton onClick={handleCancel}>Cancel</ActionButton>
+</ActionGroup>
+```
+
+<ParamField path="children" type="React.ReactNode">
+  Action components to render inside the group.
+</ParamField>
+
+<ParamField path="className" type="string">
+  Additional CSS class for the wrapper element.
+</ParamField>
+
+</Accordion>
+
+</AccordionGroup>
+
+## Modals
+
+<AccordionGroup>
+
+<Accordion title="ActionModal and useActionModal — modal triggered by action">
+
+`ActionModal` renders an inline modal trigger. `useActionModal` is an imperative hook that opens a modal programmatically and returns a promise resolving to the user's result.
+
+<CodeGroup>
+
+```tsx ActionModal component
+import { ActionModal } from 'react-declarative';
+
+<ActionModal
+  title="Confirm"
+  handler={async (data) => {
+    await performAction(data);
+    return true; // resolves the modal's promise
+  }}
+  onClose={(result) => console.log(result)}
+>
+  {(data, next) => (
+    <div>
+      <p>Are you sure?</p>
+      <button onClick={() => next(data)}>Yes</button>
+    </div>
+  )}
+</ActionModal>
+```
+
+```tsx useActionModal hook
+import { useActionModal } from 'react-declarative';
+
+const pickConfirm = useActionModal({
+  title: 'Confirm',
+  fields: confirmFields,
+});
+
+// Later:
+const result = await pickConfirm({ id });
+if (result) performAction(result);
+```
+
+</CodeGroup>
+
+**`ActionModal` props:**
+
+<ParamField path="title" type="string">
+  Modal title text.
+</ParamField>
+
+<ParamField path="handler" type="(data: T) => Promise<boolean>">
+  Async handler called when the modal is submitted; returning `true` closes the modal successfully.
+</ParamField>
+
+<ParamField path="children" type="(data: T, next: (data: T) => void) => React.ReactNode">
+  Render prop for the modal body.
+</ParamField>
+
+<ParamField path="onClose" type="(result: T | null) => void">
+  Called when the modal closes with the final result or `null` if dismissed.
+</ParamField>
+
+**`useActionModal` returns:**
+
+A `pickModalFn` that accepts an initial data object and returns `Promise<T | null>`.
+
+</Accordion>
+
+</AccordionGroup>
+
+## Animation States
+
+<AccordionGroup>
+
+<Accordion title="ActionBounce and ActionState — animation state helpers">
+
+`ActionBounce` applies a bounce animation to its children when its state changes. `ActionState` manages discrete animation states for loading, success, and error visual feedback.
+
+<CodeGroup>
+
+```tsx ActionBounce
+import { ActionBounce } from 'react-declarative';
+
+<ActionBounce enabled={didUpdate}>
+  <Avatar src={user.avatar} />
+</ActionBounce>
+```
+
+```tsx ActionState
+import { ActionState } from 'react-declarative';
+
+<ActionState
+  state={actionState} // 'idle' | 'loading' | 'success' | 'error'
+  icons={{
+    idle: <EditIcon />,
+    loading: <CircularProgress size={20} />,
+    success: <CheckIcon />,
+    error: <ErrorIcon />,
+  }}
+/>
+```
+
+</CodeGroup>
+
+**`ActionBounce` props:**
+
+<ParamField path="enabled" type="boolean">
+  When this transitions from `false` to `true`, the bounce animation plays.
+</ParamField>
+
+<ParamField path="children" type="React.ReactNode">
+  Content to animate.
+</ParamField>
+
+**`ActionState` props:**
+
+<ParamField path="state" type="'idle' | 'loading' | 'success' | 'error'">
+  Current state; drives which icon/slot is rendered.
+</ParamField>
+
+<ParamField path="icons" type="Record<string, React.ReactNode>">
+  Map of state keys to rendered nodes.
+</ParamField>
+
+</Accordion>
+
+</AccordionGroup>
+
+<Tip>
+All Action components that accept `onLoadEnd` will receive `isOk = false` when the async operation throws. Combine with `fallback` to display a snack or toast without crashing the component tree.
+</Tip>

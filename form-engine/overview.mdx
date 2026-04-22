@@ -1,0 +1,117 @@
+---
+title: "Form Engine Overview: One Component & TypedField"
+description: "Learn how react-declarative's One component turns a TypedField[] schema into a fully managed form with automatic state, validation, and responsive layout."
+---
+
+The react-declarative form engine lets you describe a complete form as a flat or nested `TypedField[]` array and hand it to the `<One />` component. The library handles state management, validation callbacks, responsive column layout, and field interactions automatically — you write the schema, not the wiring.
+
+## How it works
+
+The `<One />` component accepts three core props to drive a form:
+
+- **`fields`** — a `TypedField[]` array that declares every field and layout in the form.
+- **`handler`** — a plain data object, a synchronous function, or an `async` function that returns the initial data. The component fetches this once on mount.
+- **`change`** — a callback called every time any field value changes, receiving the updated data object.
+
+```tsx
+import { One, FieldType, TypedField } from 'react-declarative';
+
+interface IProfileData {
+  firstName: string;
+  lastName: string;
+  role: string;
+}
+
+const fields: TypedField<IProfileData>[] = [
+  {
+    type: FieldType.Group,
+    fields: [
+      {
+        type: FieldType.Text,
+        name: 'firstName',
+        title: 'First name',
+        description: 'Your given name',
+      },
+      {
+        type: FieldType.Text,
+        name: 'lastName',
+        title: 'Last name',
+      },
+      {
+        type: FieldType.Combo,
+        name: 'role',
+        title: 'Role',
+        placeholder: 'Select a role',
+        itemList: ['Admin', 'Editor', 'Viewer'],
+      },
+    ],
+  },
+];
+
+export const ProfileForm = () => (
+  <One
+    fields={fields}
+    handler={{ firstName: 'Jane', lastName: 'Doe', role: 'Editor' }}
+    change={(data) => console.log('form changed', data)}
+  />
+);
+```
+
+## The `handler` prop
+
+`handler` accepts three shapes:
+
+| Shape | When to use |
+|---|---|
+| Plain object `{ key: value }` | Static mock data or pre-loaded records |
+| Sync function `(payload) => data` | Derived from in-memory state |
+| Async function `async (payload) => data` | Fetching from an API or database |
+
+```tsx
+// Static object
+handler={{ email: 'user@example.com', active: true }}
+
+// Async fetch
+handler={async () => {
+  const profile = await fetch('/api/profile').then(r => r.json());
+  return profile;
+}}
+```
+
+While `handler` is loading, `<One />` suspends the form render. If it throws, the optional `fallback` callback receives the error.
+
+## TypedField and IntelliSense
+
+Using `TypedField<Data>` instead of the base `IField<Data>` gives IDE auto-complete that narrows available props to those valid for the chosen `type`. This prevents mixing props intended for one field type onto another.
+
+```tsx
+const fields: TypedField<IProfileData>[] = [
+  {
+    type: FieldType.Text,   // IntelliSense shows only TextField props
+    name: 'firstName',
+    inputType: 'text',
+    leadingIcon: PersonIcon,
+  },
+];
+```
+
+<Note>
+All validations live in the schema itself — no separate JSON Schema or Yup configuration required. See the [Validation](/form-engine/validation) page for details.
+</Note>
+
+## Explore further
+
+<CardGroup cols={2}>
+  <Card title="Field Types" href="/form-engine/field-types">
+    Every input, selection, and display field type with props and examples.
+  </Card>
+  <Card title="Layouts" href="/form-engine/layouts">
+    Group, Paper, Tabs, Condition, Hero, and all other layout containers.
+  </Card>
+  <Card title="Validation" href="/form-engine/validation">
+    isInvalid, isDisabled, isVisible, isReadonly callbacks and form submission guards.
+  </Card>
+  <Card title="State Management" href="/form-engine/state-management">
+    handler patterns, onChange debouncing, useOne hook, and utility helpers.
+  </Card>
+</CardGroup>

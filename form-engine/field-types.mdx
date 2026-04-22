@@ -1,0 +1,514 @@
+---
+title: "react-declarative Field Types: Complete Reference"
+description: "Full reference for every FieldType in react-declarative — inputs, selections, display elements, and special fields — with props and tsx examples."
+---
+
+react-declarative exposes its field catalogue through the `FieldType` enum. Every entry in a `TypedField[]` schema must carry a `type` property set to one of these values. This page documents each field, grouped by role, with the most relevant `IField` props and a short usage example.
+
+<Note>
+All fields share the common `IField` base props: `name`, `title`, `description`, `columns`, `phoneColumns`, `tabletColumns`, `desktopColumns`, `isInvalid`, `isDisabled`, `isVisible`, `isReadonly`, `defaultValue`, `className`, `style`, and `sx`.
+</Note>
+
+## Input fields
+
+Fields that accept text, numbers, dates, or files from the user.
+
+<AccordionGroup>
+  <Accordion title="FieldType.Text — free-text input">
+    Renders a MUI `TextField`. Supports multiline, leading/trailing icons, input masks, and debounced change events.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `inputType` | `'text' \| 'email' \| 'number' \| 'password' \| 'url' \| ...` | HTML input type |
+    | `inputRows` | `number` | Number of rows for multiline mode |
+    | `inputFormatter` | `(input: string) => string` | Transform raw user input |
+    | `inputFormatterTemplate` | `string` | Mask template string |
+    | `leadingIcon` / `trailingIcon` | `React.ComponentType` | Icon components |
+    | `leadingIconClick` / `trailingIconClick` | callback | Handle icon clicks |
+    | `labelShrink` | `boolean` | Keep label above field even when empty |
+
+    ```tsx
+    {
+      type: FieldType.Text,
+      name: 'email',
+      title: 'Email address',
+      inputType: 'email',
+      trailingIcon: EmailIcon,
+      defaultValue: 'user@example.com',
+      isInvalid({ email }) {
+        const expr = /^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$/g;
+        return expr.test(email) ? null : 'Invalid email address';
+      },
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Complete — autocomplete text input">
+    A text field with a dropdown suggestion list. Suggestions can be a static array or an async function.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `tip` | `string[] \| ((value, data, payload) => string[] \| Promise<string[]>)` | Suggestion source |
+    | `tipSelect` | `(value, data, payload, onChange) => void` | Called when user picks a suggestion |
+    | `keepRaw` | `boolean` | Disable full-text filtering of suggestions |
+
+    ```tsx
+    {
+      type: FieldType.Complete,
+      name: 'city',
+      title: 'City',
+      tip: async (value) => {
+        const results = await searchCities(value);
+        return results.map((c) => c.name);
+      },
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Date / FieldType.Time — date and time pickers">
+    MUI-based date and time picker fields. The stored value is a locale-formatted string.
+
+    ```tsx
+    {
+      type: FieldType.Date,
+      name: 'birthDate',
+      title: 'Date of birth',
+    }
+    ```
+
+    ```tsx
+    {
+      type: FieldType.Time,
+      name: 'meetingTime',
+      title: 'Meeting time',
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Slider — numeric range slider">
+    Horizontal range slider with configurable min, max, step, and color callbacks.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `minSlider` | `number` | Minimum value (default `0`) |
+    | `maxSlider` | `number` | Maximum value (default `100`) |
+    | `stepSlider` | `number` | Step increment |
+    | `sliderSteps` | `{ value: number; label: string }[]` | Labelled stop points |
+    | `labelFormatSlider` | `(v: number) => string \| number` | Format the bubble label |
+    | `sliderThumbColor` | `(v: number) => string` | Dynamic thumb colour |
+    | `sliderTrackColor` | `(v: number) => string` | Dynamic track colour |
+    | `sliderRailColor` | `(v: number) => string` | Dynamic rail colour |
+
+    ```tsx
+    {
+      type: FieldType.Slider,
+      name: 'volume',
+      title: 'Volume',
+      defaultValue: 30,
+      minSlider: 0,
+      maxSlider: 100,
+      stepSlider: 5,
+      leadingIcon: VolumeDownIcon,
+      trailingIcon: VolumeUpIcon,
+      leadingIconClick(v, data, payload, onValueChange) { onValueChange(v - 10); },
+      trailingIconClick(v, data, payload, onValueChange) { onValueChange(v + 10); },
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Rating — star rating">
+    A 1–5 star rating control. The value is stored as a number.
+
+    ```tsx
+    {
+      type: FieldType.Rating,
+      name: 'rating',
+      title: 'Product rating',
+      defaultValue: 3,
+      columns: '3',
+      phoneColumns: '12',
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.File — file upload">
+    Opens a file picker. Calls the `upload` callback with the selected `File` object and expects a URL string in return.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `fileAccept` | `string` | MIME type filter, e.g. `'image/*'` |
+    | `upload` | `(file, data, payload) => Promise<string> \| string` | Upload handler, returns stored URL |
+    | `view` | `(url, data, payload) => void` | Called when user clicks to preview |
+
+    ```tsx
+    {
+      type: FieldType.File,
+      name: 'avatar',
+      title: 'Profile picture',
+      fileAccept: 'image/*',
+      upload: async (file) => {
+        const url = await uploadToS3(file);
+        return url;
+      },
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Selection fields
+
+Fields that let users choose from a predefined set of values.
+
+<AccordionGroup>
+  <Accordion title="FieldType.Checkbox — boolean checkbox">
+    A single MUI checkbox. The value is `true` or `false`.
+
+    ```tsx
+    {
+      type: FieldType.Checkbox,
+      name: 'agreeToTerms',
+      title: 'I agree to the terms of service',
+      defaultValue: false,
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Switch — toggle switch">
+    An on/off toggle. Stores a boolean. Supports a secondary label for the active state.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `switchNoColor` | `boolean` | Disable the default colour tint |
+    | `switchActiveLabel` | `string` | Alternative label when switch is on |
+
+    ```tsx
+    {
+      type: FieldType.Switch,
+      name: 'notifications',
+      title: 'Email notifications',
+      switchActiveLabel: 'Enabled',
+      defaultValue: true,
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.YesNo — yes/no dropdown">
+    A simple two-option select that stores `'yes'` or `'no'` as a string.
+
+    ```tsx
+    {
+      type: FieldType.YesNo,
+      name: 'hasSubscription',
+      title: 'Active subscription?',
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Radio — radio button group">
+    Each radio option is a separate field sharing the same `name`. The selected `radioValue` is written to the data object.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `radioValue` | `string` | The value written when this radio is selected |
+
+    ```tsx
+    {
+      type: FieldType.Radio,
+      name: 'plan',
+      title: 'Free',
+      radioValue: 'free',
+    },
+    {
+      type: FieldType.Radio,
+      name: 'plan',
+      title: 'Pro',
+      radioValue: 'pro',
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Combo — single-select dropdown">
+    A searchable single-value autocomplete dropdown. Items can be loaded asynchronously and labels translated via `tr`.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `itemList` | `string[] \| async fn` | Option values |
+    | `tr` | `(id, data, payload) => string \| Promise<string>` | Translate IDs to human-readable labels |
+    | `freeSolo` | `boolean` | Allow the user to type a custom value |
+    | `noDeselect` | `boolean` | Prevent clearing the selection |
+    | `virtualListBox` | `boolean` | Enable virtualisation for long lists |
+
+    ```tsx
+    {
+      type: FieldType.Combo,
+      name: 'country',
+      title: 'Country',
+      placeholder: 'Select a country',
+      itemList: async () => fetchCountryCodes(),
+      tr: async (code) => getCountryName(code),
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Items — multi-select chips">
+    A multi-value autocomplete that stores a `string[]`. Supports the same `itemList` and `tr` props as Combo.
+
+    ```tsx
+    {
+      type: FieldType.Items,
+      name: 'tags',
+      title: 'Tags',
+      placeholder: 'Add tags',
+      itemList: ['bug', 'feature', 'docs', 'refactor'],
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Choose — modal search picker">
+    Opens a full-screen search modal (built on `useSearchModal`) to pick a single value or a list of values. Useful when the option set is too large for a dropdown.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `choose` | `(data, payload) => Promise<string \| string[] \| null>` | Opens the picker and resolves to the chosen value(s) |
+
+    ```tsx
+    {
+      type: FieldType.Choose,
+      name: 'assigneeId',
+      title: 'Assignee',
+      choose: async (data, payload) => {
+        return await openUserPickerModal();
+      },
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Tree — hierarchical tree select">
+    A tree-shaped selection control for hierarchical data such as category trees or org charts.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `itemTree` | `ITreeNode[] \| async fn` | Tree nodes with `id`, `label`, and optional `children` |
+    | `watchItemTree` | `boolean` | Re-evaluate `itemTree` on every data change |
+
+    ```tsx
+    {
+      type: FieldType.Tree,
+      name: 'categoryId',
+      title: 'Category',
+      itemTree: [
+        { id: 'tech', label: 'Technology', children: [
+          { id: 'frontend', label: 'Frontend' },
+          { id: 'backend', label: 'Backend' },
+        ]},
+      ],
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Dict — server-side search dictionary">
+    A search-as-you-type field backed by a server API. Results are paginated via `dictSearch`. When no result is found, `dictOnAppend` can create a new record.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `dictSearch` | `(dto) => ISearchItem[] \| Promise<ISearchItem[]>` | Called on every keystroke |
+    | `dictLimit` | `number` | Page size; if results < limit, no further requests are made |
+    | `dictDelay` | `number` | Debounce delay in ms |
+    | `dictValue` | `(value, data, payload) => ISearchItem \| Promise<ISearchItem>` | Load label for existing value |
+    | `dictOnAppend` | callback | Called to create a new record when search yields nothing |
+
+    ```tsx
+    {
+      type: FieldType.Dict,
+      name: 'customerId',
+      title: 'Customer',
+      dictLimit: 25,
+      dictSearch: async ({ search, limit, offset }) => {
+        return await api.searchCustomers({ search, limit, offset });
+      },
+      dictValue: async (id) => api.getCustomerLabel(id),
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Display fields
+
+Fields that show read-only information or visual indicators.
+
+<AccordionGroup>
+  <Accordion title="FieldType.Typography — static text">
+    Renders a MUI `Typography` element. No `name` needed; use `title` for the text content.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `typoVariant` | `'h1' \| 'h2' \| ... \| 'body1' \| 'caption'` | MUI typography variant |
+
+    ```tsx
+    {
+      type: FieldType.Typography,
+      typoVariant: 'h5',
+      title: 'Account details',
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Progress — progress bar">
+    Displays a horizontal progress bar driven by a numeric field value. Use the same `name` as a `Slider` to sync them.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `maxPercent` | `number` | Value treated as 100 % (default `100`) |
+    | `showPercentLabel` | `boolean` | Show numeric label on the left |
+    | `progressColor` | `(v: number) => string` | Dynamic bar colour |
+    | `progressBarColor` | `(v: number) => string` | Dynamic track colour |
+
+    ```tsx
+    {
+      type: FieldType.Progress,
+      name: 'volume',
+      showPercentLabel: true,
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Icon — decorative icon button">
+    Renders a clickable or static icon. Useful for action triggers inside a form row.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `icon` | `React.ComponentType` | Icon component |
+    | `iconSize` | `number` | Size in pixels |
+    | `iconColor` | MUI colour token | Icon colour |
+    | `iconBackground` | MUI colour token | Background badge colour |
+
+    ```tsx
+    {
+      type: FieldType.Icon,
+      icon: InfoIcon,
+      iconSize: 24,
+      iconColor: 'primary',
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Button — action button">
+    An inline MUI button. Not backed by a form value; use for in-form actions like clearing a sub-section.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `buttonVariant` | `'text' \| 'outlined' \| 'contained'` | MUI button variant |
+    | `buttonSize` | `'small' \| 'medium' \| 'large'` | Size |
+    | `buttonColor` | MUI colour token | Colour theme |
+    | `icon` | `React.ComponentType` | Optional leading icon |
+
+    ```tsx
+    {
+      type: FieldType.Button,
+      title: 'Clear section',
+      buttonVariant: 'outlined',
+      buttonColor: 'secondary',
+      click(name, e, data, payload, onValueChange, onChange) {
+        onChange({ ...data, subSection: null });
+      },
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Special fields
+
+Fields that affect data flow or layout without rendering visible UI.
+
+<AccordionGroup>
+  <Accordion title="FieldType.Component — custom JSX injection">
+    Injects any React component directly into the form grid. The component receives the current form data, payload, and change helpers.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `element` | `React.ComponentType<ComponentFieldInstance>` | The component to render |
+    | `watchOneContext` | `boolean` | Re-render on every data change (disabled by default) |
+
+    ```tsx
+    {
+      type: FieldType.Component,
+      element: ({ data, onChange }) => (
+        <div>
+          <strong>Preview:</strong> {data.firstName} {data.lastName}
+        </div>
+      ),
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Init — one-time initialisation side-effect">
+    Runs a callback once when the form mounts. Does not render any visible UI. Useful for loading external data into the form object on first render.
+
+    ```tsx
+    {
+      type: FieldType.Init,
+      name: 'init',
+      // element receives { onChange } to push initial values
+      element: ({ onChange }) => {
+        useEffect(() => {
+          loadDefaults().then((defaults) => onChange(defaults));
+        }, []);
+        return null;
+      },
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Phony — virtual computed field">
+    A field with no UI that holds a derived value. It is excluded from `getInitialData` and serialisation by default. Use `compute` to calculate its value reactively.
+
+    ```tsx
+    {
+      type: FieldType.Phony,
+      name: 'fullName',
+      compute: ({ firstName, lastName }) => `${firstName} ${lastName}`,
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="FieldType.Line — visual divider">
+    Renders a horizontal rule with an optional `title` label. Does not write to the data object.
+
+    ```tsx
+    {
+      type: FieldType.Line,
+      title: 'Personal information',
+    }
+    ```
+  </Accordion>
+</AccordionGroup>

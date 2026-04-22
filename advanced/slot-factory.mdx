@@ -1,0 +1,238 @@
+---
+title: 'Customizing UI Renderers with SlotFactory'
+description: 'Replace any default MUI field renderer in react-declarative forms and lists by providing your own components through OneSlotFactory or ListSlotFactory.'
+keywords: ['OneSlotFactory', 'ListSlotFactory', 'slot', 'UI kit', 'custom fields', 'MUI override', 'react-declarative-mantine']
+---
+
+The `OneSlotFactory` and `ListSlotFactory` components in react-declarative let you swap out every default MUI-based renderer for a custom implementation, making it possible to adopt an entirely different UI kit — such as Mantine, Chakra UI, or your own design system — without touching form schemas or business logic.
+
+## How OneSlotFactory works
+
+Every field rendered by the `<One />` component is resolved through a slot context. `OneSlotFactory` is a provider that overrides one or more of those slots. Wrapping your application (or a subtree) with it is the only change required; all state management, validation, and layout continue to work unchanged.
+
+```tsx
+import { OneSlotFactory } from 'react-declarative';
+import { MyCheckBox } from './slots/MyCheckBox';
+import { MyInput }    from './slots/MyInput';
+
+const App = () => (
+  <OneSlotFactory
+    CheckBox={MyCheckBox}
+    Text={MyInput}
+  >
+    <One fields={fields} handler={handler} />
+  </OneSlotFactory>
+);
+```
+
+You can override as many or as few slots as you need. Any slot you omit continues to use the built-in MUI renderer.
+
+## Available One slots
+
+Each prop name maps to a `FieldType` variant and must satisfy the corresponding slot interface exported from `react-declarative`.
+
+<AccordionGroup>
+  <Accordion title="Input field slots">
+
+  | Prop name   | Interface type     | FieldType counterpart  |
+  |-------------|-------------------|------------------------|
+  | `CheckBox`  | `ICheckBoxSlot`   | `FieldType.Checkbox`   |
+  | `YesNo`     | `IYesNoSlot`      | `FieldType.YesNo`      |
+  | `Combo`     | `IComboSlot`      | `FieldType.Combo`      |
+  | `Items`     | `IItemsSlot`      | `FieldType.Items`      |
+  | `Radio`     | `IRadioSlot`      | `FieldType.Radio`      |
+  | `Text`      | `ITextSlot`       | `FieldType.Text`       |
+  | `Complete`  | `ICompleteSlot`   | `FieldType.Complete`   |
+  | `Switch`    | `ISwitchSlot`     | `FieldType.Switch`     |
+  | `Slider`    | `ISliderSlot`     | `FieldType.Slider`     |
+  | `Rating`    | `IRatingSlot`     | `FieldType.Rating`     |
+
+  </Accordion>
+  <Accordion title="Date and time slots">
+
+  | Prop name | Interface type | FieldType counterpart |
+  |-----------|---------------|----------------------|
+  | `Date`    | `IDateSlot`   | `FieldType.Date`     |
+  | `Time`    | `ITimeSlot`   | `FieldType.Time`     |
+
+  </Accordion>
+  <Accordion title="Media and selection slots">
+
+  | Prop name  | Interface type  | FieldType counterpart |
+  |------------|----------------|----------------------|
+  | `File`     | `IFileSlot`    | `FieldType.File`     |
+  | `Choose`   | `IChooseSlot`  | `FieldType.Choose`   |
+  | `Dict`     | `IDictSlot`    | `FieldType.Dict`     |
+  | `Tree`     | `ITreeSlot`    | `FieldType.Tree`     |
+
+  </Accordion>
+  <Accordion title="Display slots">
+
+  | Prop name    | Interface type      | FieldType counterpart    |
+  |--------------|--------------------|--------------------------| 
+  | `Line`       | `ILineSlot`        | `FieldType.Line`         |
+  | `Progress`   | `IProgressSlot`    | `FieldType.Progress`     |
+  | `Typography` | `ITypographySlot`  | `FieldType.Typography`   |
+  | `Button`     | `IButtonSlot`      | `FieldType.Button`       |
+  | `Icon`       | `IIconSlot`        | `FieldType.Icon`         |
+
+  </Accordion>
+</AccordionGroup>
+
+## Writing a custom slot
+
+A slot component receives a typed props object and is responsible only for rendering. All state changes flow through the `onChange` callback; react-declarative keeps the form state under the hood.
+
+The example below overrides `FieldType.Date` with the MUI X `DatePicker`:
+
+```tsx
+import { DatePicker } from '@mui/x-date-pickers';
+import { useMemo } from 'react';
+import { IDateSlot, datetime } from 'react-declarative';
+import dayjs from 'dayjs';
+
+export const DateSlot = ({
+  invalid,
+  value,
+  disabled,
+  description = '',
+  outlined = true,
+  title = 'Date',
+  labelShrink,
+  dirty,
+  autoFocus,
+  inputRef,
+  onChange,
+  name,
+}: IDateSlot) => {
+  const dayjsValue = useMemo(() => {
+    if (value) {
+      const date = datetime.parseDate(value);
+      if (!date) return undefined;
+      let now = dayjs();
+      now = now.set('date', date.day);
+      now = now.set('month', date.month - 1);
+      now = now.set('year', date.year);
+      return now;
+    }
+    return undefined;
+  }, [value]);
+
+  return (
+    <DatePicker
+      label={title}
+      value={dayjsValue}
+      onChange={(value: dayjs.Dayjs | null) => {
+        if (value) {
+          const day   = value.get('date');
+          const month = value.get('month') + 1;
+          const year  = value.get('year');
+          onChange(new datetime.Date(day, month, year).toString());
+          return;
+        }
+        onChange(null);
+      }}
+      slotProps={{
+        textField: {
+          inputRef,
+          InputLabelProps: labelShrink ? { shrink: labelShrink } : undefined,
+          disabled,
+          focused: autoFocus,
+          variant: outlined ? 'outlined' : 'standard',
+          label: title,
+          name,
+          helperText: (dirty && invalid) || description,
+          error: dirty && invalid !== null,
+        },
+      }}
+    />
+  );
+};
+```
+
+The slot can also be applied to a single `<One />` instance via the `slots` prop, without wrapping the whole tree:
+
+```tsx
+<One
+  fields={fields}
+  handler={handler}
+  slots={{
+    Date: DateSlot,
+  }}
+/>
+```
+
+## Available List slots
+
+`ListSlotFactory` customises the `<List />` data grid in the same way. The following slots are available:
+
+<AccordionGroup>
+  <Accordion title="Row and cell slots">
+
+  | Prop name        | Interface type          |
+  |------------------|------------------------|
+  | `DesktopBodyRow` | `IBodyRowSlot`         |
+  | `MobileBodyRow`  | `IBodyRowSlot`         |
+  | `BodyRow`        | `IBodyRowSlot`         |
+  | `CheckboxCell`   | `ICheckboxCellSlot`    |
+  | `CommonCell`     | `ICommonCellSlot`      |
+  | `HeadRow`        | `IHeadRowSlot`         |
+
+  </Accordion>
+  <Accordion title="Action and toolbar slots">
+
+  | Prop name          | Interface type           |
+  |--------------------|--------------------------|
+  | `ActionAdd`        | `IActionAddSlot`         |
+  | `ActionFab`        | `IActionFabSlot`         |
+  | `ActionMenu`       | `IActionMenuSlot`        |
+  | `ActionListSlot`   | `IActionListSlot`        |
+  | `FilterListSlot`   | `IFilterListSlot`        |
+  | `ChipListSlot`     | `IChipListSlot`          |
+  | `OperationListSlot`| `IOperationListSlot`     |
+  | `SearchSlot`       | `ISearchSlot`            |
+
+  </Accordion>
+</AccordionGroup>
+
+```tsx
+import { ListSlotFactory } from 'react-declarative';
+import { MyBodyRow } from './slots/MyBodyRow';
+
+const App = () => (
+  <ListSlotFactory BodyRow={MyBodyRow}>
+    <List columns={columns} handler={handler} />
+  </ListSlotFactory>
+);
+```
+
+## Using react-declarative-mantine
+
+<Note>
+  The [react-declarative-mantine](https://github.com/react-declarative/react-declarative-mantine) package ships a pre-built `OneSlotFactory` that replaces every MUI field with a Mantine equivalent. It is the recommended starting point when adopting a non-MUI design system.
+</Note>
+
+```tsx
+import '@mantine/core/styles.css';
+import '@mantine/dates/styles.css';
+
+import { MantineProvider } from '@mantine/core';
+import { OneSlotFactory } from 'react-declarative-mantine';
+import ReactDOM from 'react-dom';
+
+const wrappedApp = (
+  <MantineProvider>
+    <OneSlotFactory>
+      <App />
+    </OneSlotFactory>
+  </MantineProvider>
+);
+
+ReactDOM.render(wrappedApp, document.getElementById('root'));
+```
+
+A [react-declarative-shadcn](https://github.com/react-declarative/react-declarative-shadcn) starter is also available for projects using shadcn/ui with Tailwind CSS.
+
+## Team workflow tip
+
+React-declarative is designed to let you ship with MUI defaults first and replace them with a custom UI kit later. Split the frontend team: one group implements features using default MUI fields; a second group builds replacement slot components validated against the [E2E test suite](https://github.com/react-declarative/react-declarative-e2e/). The slot interface contract keeps the two workstreams independent.

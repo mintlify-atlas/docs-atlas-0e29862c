@@ -1,0 +1,229 @@
+---
+title: "Form Validation: isInvalid, isDisabled, isVisible"
+description: "How to validate fields, conditionally disable or hide inputs, and prevent form submission when data is invalid in react-declarative's One component."
+---
+
+react-declarative embeds all validation and visibility logic directly in the field schema. There is no separate validation library or schema language — each `IField` accepts callback props that receive the current form data and return a result. This page covers `isInvalid`, `isIncorrect`, `isDisabled`, `isVisible`, `isReadonly`, and how invalidity gates form submission.
+
+## Validation callbacks
+
+Every field in the schema can declare any combination of four callbacks:
+
+| Callback | Signature | Return value |
+|---|---|---|
+| `isInvalid` | `(data, payload) => string \| null` | Error message string, or `null` for valid |
+| `isIncorrect` | `(data, payload) => string \| null` | Non-blocking warning (shown but does not block save) |
+| `isDisabled` | `(data, payload) => boolean` | `true` to disable the field |
+| `isVisible` | `(data, payload) => boolean` | `false` to hide the field |
+| `isReadonly` | `(data, payload) => boolean` | `true` to make the field read-only |
+
+Each callback receives the **full current data object** as its first argument, so decisions can cross-reference any field in the form.
+
+## Email validation example
+
+The following schema is taken directly from the library's validation demo. It validates an email field and uses `isDisabled` / `isVisible` on the same field to allow the user to hide or disable it from a separate settings section:
+
+```tsx
+const fields: TypedField[] = [
+  {
+    type: FieldType.Text,
+    name: 'email',
+    trailingIcon: EmailIcon,
+    defaultValue: 'tripolskypetr@gmail.com',
+    isInvalid({ email }) {
+      const expr = /^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$/g;
+      if (!expr.test(email)) {
+        return 'Invalid email address';
+      }
+      return null;
+    },
+    isDisabled({ disabled }) {
+      return disabled;
+    },
+    isVisible({ visible }) {
+      return visible;
+    },
+  },
+  {
+    type: FieldType.Expansion,
+    title: 'Settings',
+    description: 'Hide or disable',
+    fields: [
+      {
+        type: FieldType.Switch,
+        title: 'Mark as visible',
+        name: 'visible',
+        defaultValue: true,
+      },
+      {
+        type: FieldType.Switch,
+        title: 'Mark as disabled',
+        name: 'disabled',
+        defaultValue: false,
+      },
+    ],
+  },
+];
+```
+
+<Note>
+Validation is lazy by default — `isInvalid` is only evaluated after the user has focused and blurred a field. To show validation errors immediately (e.g. when loading a pre-filled form), set `dirty: true` on the field or on the `<One />` component.
+</Note>
+
+## Conditional field visibility
+
+`isVisible` hides a field from the DOM when it returns `false`. The field's value is preserved in the data object; it is simply not shown.
+
+```tsx
+const fields: TypedField[] = [
+  {
+    type: FieldType.Items,
+    title: 'A sample field',
+    placeholder: 'Multiple selection',
+    name: 'items',
+    itemList: ['a', 'b', 'c'],
+    isVisible: (obj) => obj.visible,
+    isDisabled: (obj) => obj.disabled,
+  },
+  {
+    type: FieldType.Checkbox,
+    title: 'Mark as visible',
+    defaultValue: true,
+    name: 'visible',
+  },
+  {
+    type: FieldType.Checkbox,
+    title: 'Mark as disabled',
+    defaultValue: false,
+    name: 'disabled',
+  },
+];
+```
+
+<Tip>
+Use `hidden` (a static boolean or `(payload) => boolean`) when visibility depends on user roles or feature flags loaded via the `payload` prop, rather than on the form's own data. Fields with `hidden: true` are completely excluded from the DOM tree and their values are not initialised.
+</Tip>
+
+## Read-only fields
+
+`isReadonly` prevents input while still showing the current value. Unlike `isDisabled`, a read-only field is never greyed out and its value is always included in `onChange` output.
+
+```tsx
+{
+  type: FieldType.Text,
+  name: 'createdAt',
+  title: 'Created at',
+  isReadonly: () => true,   // always read-only
+}
+```
+
+## Computed fields (auto read-only)
+
+Setting `compute` on a field automatically makes it read-only and derives its displayed value from the form data on every render cycle. The result is written to the field's `name` key in the data object.
+
+```tsx
+{
+  type: FieldType.Text,
+  name: 'fullName',
+  title: 'Full name',
+  compute: ({ firstName, lastName }) => `${firstName} ${lastName}`,
+}
+```
+
+Use `shouldRecompute` to memoize and skip unnecessary re-evaluations:
+
+```tsx
+{
+  type: FieldType.Text,
+  name: 'fullName',
+  title: 'Full name',
+  compute: ({ firstName, lastName }) => `${firstName} ${lastName}`,
+  shouldRecompute: (prev, next) =>
+    prev.firstName !== next.firstName || prev.lastName !== next.lastName,
+}
+```
+
+## Preventing form submission
+
+`isInvalid` returning a non-null string blocks submission. The standard pattern is to gate a save action on the form's `invalidity` callback — which fires whenever any field fails validation — combined with a disabled submit button:
+
+```tsx
+const [hasErrors, setHasErrors] = React.useState(false);
+
+<One
+  fields={fields}
+  handler={handler}
+  invalidity={(name, message) => {
+    // Called when any field reports an error
+    setHasErrors(true);
+  }}
+  change={(data) => {
+    // Recompute on every change
+    setHasErrors(false);
+  }}
+/>
+
+<Button
+  variant="contained"
+  disabled={hasErrors}
+  onClick={handleSave}
+>
+  Save
+</Button>
+```
+
+Per-field `invalidity` callbacks also exist for targeted side-effects:
+
+```tsx
+{
+  type: FieldType.Text,
+  name: 'email',
+  isInvalid({ email }) {
+    return /^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$/g.test(email)
+      ? null
+      : 'Invalid email address';
+  },
+  invalidity(name, errorMessage, payload) {
+    console.warn(`Field "${name}" is invalid:`, errorMessage);
+  },
+}
+```
+
+## Non-blocking warnings with `isIncorrect`
+
+`isIncorrect` behaves like `isInvalid` but the returned message is displayed as a warning rather than a hard error. It does **not** prevent form submission and does not contribute to the `invalidity` callback.
+
+```tsx
+{
+  type: FieldType.Text,
+  name: 'bio',
+  title: 'Bio',
+  isIncorrect({ bio }) {
+    if (bio && bio.length > 280) {
+      return 'Bio is long — consider shortening it';
+    }
+    return null;
+  },
+}
+```
+
+## Payload-based access control
+
+The second argument to all callbacks is `payload`, a static context object passed to `<One />` from outside. Use it for role-based or feature-flag-driven validation rules:
+
+```tsx
+<One
+  fields={fields}
+  payload={{ role: 'viewer', features: new Set(['read-only']) }}
+/>
+```
+
+```tsx
+{
+  type: FieldType.Text,
+  name: 'internalNote',
+  title: 'Internal note',
+  isVisible: (data, payload) => payload.role === 'admin',
+  isReadonly: (data, payload) => payload.features.has('read-only'),
+}
+```

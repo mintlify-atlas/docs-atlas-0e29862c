@@ -1,0 +1,600 @@
+---
+title: "Hooks Reference — react-declarative"
+description: "Grouped reference for every hook exported by react-declarative: data fetching, form pickers, MVVM adapters, reactive subjects, routing, and UI helpers."
+---
+
+react-declarative exports over 50 React hooks covering async data fetching, MVVM state management, reactive programming with subjects, multi-step form pickers, router integration, and low-level UI utilities. This page groups every exported hook by category with its signature, return value, and a one-line description.
+
+## Data Fetching
+
+<AccordionGroup>
+
+<Accordion title="useAsyncAction">
+
+```typescript
+useAsyncAction<Data, Payload>(
+  run: (payload: Payload) => Data | Promise<Data>,
+  options?: {
+    fallback?: (e: Error) => void;
+    onLoadStart?: () => void;
+    onLoadEnd?: (isOk: boolean) => void;
+    throwError?: boolean;
+  }
+): { loading: boolean; error: boolean; execute: (payload?: Payload) => Promise<Data | null> }
+```
+
+Wraps an async function and tracks its `loading`/`error` state. Cancels any in-flight call when `execute` is called again. The `execute` function is stable across renders.
+
+```tsx
+const { loading, execute } = useAsyncAction(async (id: string) => {
+  return await fetchUser(id);
+});
+
+<ActionButton onClick={() => execute(userId)}>Load</ActionButton>
+```
+
+</Accordion>
+
+<Accordion title="useAsyncValue">
+
+```typescript
+useAsyncValue<Data>(
+  run: () => Data | Promise<Data>,
+  params?: {
+    fallback?: (e: Error) => void;
+    onLoadStart?: () => void;
+    onLoadEnd?: (isOk: boolean) => void;
+    throwError?: boolean;
+    deps?: any[];
+  }
+): [
+  Data | null,
+  IResult<void, void>,
+  (data: Data) => void,
+  { waitForResult: () => Promise<Data>; data$: MutableRefObject<Data | null> }
+]
+```
+
+Runs `run` on mount (and when `deps` change) and stores the resolved value. Returns the current value, an action object, a setter, and a `waitForResult` utility that polls until data is available.
+
+```tsx
+const [user, action, setUser] = useAsyncValue(() => fetchUser(id), { deps: [id] });
+```
+
+</Accordion>
+
+<Accordion title="useAsyncProgress">
+
+```typescript
+useAsyncProgress<Data, Result>(
+  process: (item: { label: string; data: Data }) => Result | Promise<Result>,
+  options?: {
+    delay?: number;
+    onBegin?: () => void;
+    onEnd?: (isOk: boolean) => void;
+    onFinish?: (data: Data[], errors: IError[], result: (Result | null)[]) => void;
+    onError?: (errors: IError[]) => void | boolean;
+    onProgress?: (progress: number) => void;
+  }
+): { execute: (items: { label: string; data: Data }[]) => void; loading: boolean; progress: number; errors: IError[]; label: string }
+```
+
+Processes an array of labelled items sequentially, reporting per-item progress. Returns to `loading: false` only when all items are processed. Returning `true` from `onError` continues processing; returning `false` stops early.
+
+</Accordion>
+
+<Accordion title="useSinglerunAction">
+
+```typescript
+useSinglerunAction<Data, Payload>(
+  run: (payload: Payload) => Data | Promise<Data>,
+  options?: IParams
+): { loading: boolean; error: boolean; execute: (payload?: Payload) => Promise<Data | null> & { clear(): void } }
+```
+
+Like `useAsyncAction` but uses `singlerun` semantics: while a call is in flight, subsequent calls share the same promise rather than replacing it. Call `execute.clear()` to reset the lock.
+
+</Accordion>
+
+<Accordion title="useQueuedAction">
+
+```typescript
+useQueuedAction<Data, Payload>(
+  run: (payload: Payload) => Data | Promise<Data>,
+  options?: IParams
+): { loading: boolean; error: boolean; execute: (payload?: Payload) => Promise<Data | null> & { clear(): void; cancel(): void } }
+```
+
+Uses `queued` semantics: calls are executed sequentially in FIFO order. `execute.cancel()` cancels any pending call.
+
+</Accordion>
+
+<Accordion title="usePreventAction">
+
+```typescript
+usePreventAction(
+  condition: () => boolean | Promise<boolean>,
+  options?: { fallback?: () => void }
+): { execute: (fn: () => void | Promise<void>) => Promise<void>; loading: boolean }
+```
+
+Guards an action behind a condition check. If the condition returns `false`, the action is prevented and `fallback` is called instead. Useful for dirty-form navigation guards.
+
+</Accordion>
+
+<Accordion title="usePreventNavigate">
+
+```typescript
+usePreventNavigate(
+  condition: () => boolean | Promise<boolean>
+): void
+```
+
+Blocks browser/router navigation when `condition` returns `true`. Displays a confirmation dialog (or calls a custom prompt) before allowing the transition.
+
+</Accordion>
+
+</AccordionGroup>
+
+## Form Pickers
+
+<Tip>
+All picker hooks open a dialog or modal and return a `Promise` that resolves to the user's selection, or `null` if dismissed.
+</Tip>
+
+<AccordionGroup>
+
+<Accordion title="useOne and useOneTyped">
+
+```typescript
+useOne(params: Partial<IOnePublicProps>): (initialData?: Data) => Promise<Data | null>
+useOneTyped<Data, Field>(params): (initialData?: Data) => Promise<Data | null>
+```
+
+Opens a `One` form dialog and resolves with the submitted data object. `useOneTyped` provides full generic typing for the field schema.
+
+```tsx
+const pickUser = useOne({ fields: userFields, title: 'Edit User' });
+
+const result = await pickUser({ name: '', email: '' });
+if (result) save(result);
+```
+
+</Accordion>
+
+<Accordion title="useList">
+
+```typescript
+useList(params): () => Promise<RowData[] | null>
+```
+
+Opens a `List` selection dialog and resolves with the selected rows.
+
+</Accordion>
+
+<Accordion title="useDate">
+
+```typescript
+useDate(params?: { title?: string; minDate?: string; maxDate?: string }): () => Promise<string | null>
+```
+
+Opens a date-picker dialog and resolves with an ISO date string.
+
+</Accordion>
+
+<Accordion title="useTime">
+
+```typescript
+useTime(params?: { title?: string }): () => Promise<string | null>
+```
+
+Opens a time-picker dialog and resolves with a `"HH:mm"` string.
+
+</Accordion>
+
+<Accordion title="useFile">
+
+```typescript
+useFile(params?: { accept?: string; multiple?: boolean }): () => Promise<File | File[] | null>
+```
+
+Opens the browser file chooser and resolves with the selected `File` or `File[]`.
+
+</Accordion>
+
+<Accordion title="useConfirm">
+
+```typescript
+useConfirm(params?: { title?: string; msg?: string }): () => Promise<boolean>
+```
+
+Shows a yes/no confirmation dialog and resolves with `true` (confirmed) or `false` (cancelled).
+
+</Accordion>
+
+<Accordion title="usePrompt">
+
+```typescript
+usePrompt(params?: { title?: string; label?: string; value?: string }): () => Promise<string | null>
+```
+
+Shows a text-input prompt dialog and resolves with the entered string.
+
+</Accordion>
+
+<Accordion title="useAlert">
+
+```typescript
+useAlert(params?: { title?: string; msg?: string }): () => Promise<void>
+```
+
+Shows an informational alert dialog and resolves when dismissed.
+
+</Accordion>
+
+</AccordionGroup>
+
+## MVVM
+
+<AccordionGroup>
+
+<Accordion title="useModel">
+
+```typescript
+useModel<T extends {}>(params: {
+  initialValue: T | Model<T> | (() => T);
+  onChange?: (adapter: ModelAdapter<T>) => void;
+  debounce?: number;
+}): ModelAdapter<T>
+```
+
+Creates a reactive `Model` backed by the MVVM `Model` class. Returns a `ModelAdapter` with:
+
+- `adapter.data` — current snapshot
+- `adapter.setData(partial | fn)` — merge partial update
+- `adapter.refresh()` — force re-render
+- `adapter.toObject()` — plain JS object snapshot
+
+`onChange` fires on every debounced change.
+
+```tsx
+const model = useModel({
+  initialValue: { name: '', email: '' },
+  onChange: (m) => console.log(m.data),
+});
+
+await model.setData({ name: 'Alice' });
+```
+
+</Accordion>
+
+<Accordion title="useEntity">
+
+```typescript
+useEntity<T extends {}>(params: {
+  initialValue: T | (() => T);
+  onChange?: (adapter: EntityAdapter<T>) => void;
+  debounce?: number;
+}): EntityAdapter<T>
+```
+
+Like `useModel` but wraps a single `Entity`. Use when managing a single record with identity.
+
+</Accordion>
+
+<Accordion title="useCollection">
+
+```typescript
+useCollection<T extends IEntity>(params?: {
+  initialValue?: T[] | Entity<T>[] | Collection<T>;
+  onChange?: (collection: CollectionAdapter<T>, target: CollectionEntityAdapter<T> | null) => void;
+  debounce?: number;
+}): CollectionAdapter<T>
+```
+
+Creates a reactive `Collection`. The returned `CollectionAdapter` exposes:
+
+- `adapter.items` — array of `CollectionEntityAdapter`
+- `adapter.push(...items)` — append items
+- `adapter.upsert(...items)` — insert or update by `id`
+- `adapter.remove(entity)` / `removeById(id)` / `removeAll()`
+- `adapter.findById(id)` — returns a `CollectionEntityAdapter`
+- `adapter.setData(items)` — replace entire collection
+- `adapter.toArray()` — plain array snapshot
+
+```tsx
+const users = useCollection({ initialValue: initialUsers });
+
+await users.push({ id: '1', name: 'Alice' });
+```
+
+</Accordion>
+
+<Accordion title="useListEditor">
+
+```typescript
+useListEditor<T>(params: {
+  initialValue?: T[];
+  onChange?: (items: T[]) => void;
+}): {
+  items: T[];
+  push: (item: T) => void;
+  remove: (index: number) => void;
+  move: (from: number, to: number) => void;
+  replace: (index: number, item: T) => void;
+}
+```
+
+Manages an ordered list with push, remove, move, and replace operations. Useful for building dynamic list UIs without MVVM overhead.
+
+</Accordion>
+
+</AccordionGroup>
+
+## Reactive
+
+<AccordionGroup>
+
+<Accordion title="useSubject">
+
+```typescript
+useSubject<Data>(target?: TSubject<Data> | null): Subject<Data>
+```
+
+Returns a stable `Subject<Data>` instance. If `target` is provided the subject subscribes to it and re-emits its values.
+
+```tsx
+const subject = useSubject<string>();
+
+subject.next('hello');
+subject.subscribe(console.log);
+```
+
+</Accordion>
+
+<Accordion title="useBehaviorSubject">
+
+```typescript
+useBehaviorSubject<Data>(initialData?: Data | null): BehaviorSubject<Data>
+```
+
+Returns a stable `BehaviorSubject`. The current value is readable synchronously via `.data` and new values are emitted with `.next(value)`.
+
+</Accordion>
+
+<Accordion title="useSubjectValue">
+
+```typescript
+useSubjectValue<Data>(
+  target: TSubject<Data>,
+  initialValue?: Data | (() => Data)
+): Data
+```
+
+Subscribes to `target` and returns its latest emitted value as React state. Re-renders on each emission.
+
+```tsx
+const count = useSubjectValue(counterSubject, 0);
+```
+
+</Accordion>
+
+<Accordion title="useSubscription">
+
+```typescript
+useSubscription(fn: () => () => void): void
+```
+
+Thin wrapper around `useEffect(fn, [])`. Calls `fn` once on mount, expecting it to return an unsubscribe cleanup function.
+
+```tsx
+useSubscription(() =>
+  eventBus.subscribe(handleEvent)
+);
+```
+
+</Accordion>
+
+<Accordion title="useChangeSubject">
+
+```typescript
+useChangeSubject<T>(value: T): Subject<T>
+```
+
+Returns a `Subject` that emits `value` whenever it changes between renders (shallow comparison). Useful for bridging prop changes into the reactive stream.
+
+</Accordion>
+
+<Accordion title="useChange">
+
+```typescript
+useChange(effect: () => void, deps: any[]): void
+```
+
+Like `useEffect` but skips the first render and fires only on subsequent changes. Equivalent to Angular's `ngOnChanges`.
+
+</Accordion>
+
+</AccordionGroup>
+
+## Router
+
+<AccordionGroup>
+
+<Accordion title="useRouteParams">
+
+```typescript
+useRouteParams<P extends Record<string, string>>(
+  pattern: string
+): P | null
+```
+
+Extracts named URL parameters from the current path using the provided route pattern. Returns `null` when the current URL does not match.
+
+```tsx
+const params = useRouteParams<{ id: string }>('/users/:id');
+```
+
+</Accordion>
+
+<Accordion title="useRouteItem">
+
+```typescript
+useRouteItem<T>(items: IOption<T>[]): T | null
+```
+
+Walks the provided route-item array and returns the item matching the current URL, enabling declarative breadcrumb and sidebar highlights.
+
+</Accordion>
+
+<Accordion title="useLocalHistory">
+
+```typescript
+useLocalHistory(): History
+```
+
+Returns an in-memory `History` instance scoped to the component tree. Useful for nested navigation that should not affect the browser URL.
+
+</Accordion>
+
+<Accordion title="useSearchParams">
+
+```typescript
+useSearchParams<T extends Record<string, string>>(): [T, (params: Partial<T>) => void]
+```
+
+Reads and writes URL query-string parameters, returning `[params, setParams]` similar to `useState`.
+
+</Accordion>
+
+<Accordion title="useSearchState">
+
+```typescript
+useSearchState<T extends Record<string, any>>(
+  key: string,
+  initialState: T
+): [T, React.Dispatch<React.SetStateAction<T>>]
+```
+
+Persists a state object in the URL query string under `key`, merging with `initialState` on first load.
+
+</Accordion>
+
+</AccordionGroup>
+
+## UI Helpers
+
+<AccordionGroup>
+
+<Accordion title="useModal">
+
+```typescript
+useModal(): {
+  showModal: (modal: React.ReactNode) => void;
+  hideModal: () => void;
+}
+```
+
+Imperative API for the nearest `ModalProvider`. Use `showModal` to inject arbitrary JSX into the modal layer.
+
+</Accordion>
+
+<Accordion title="useSnack">
+
+```typescript
+useSnack(): (message: string, options?: SnackOptions) => void
+```
+
+Returns a function that enqueues a snackbar notification via the nearest `SnackProvider`.
+
+</Accordion>
+
+<Accordion title="useSize">
+
+```typescript
+useSize(): ISize
+```
+
+Returns the current `{ width, height }` from the nearest `SizeProvider`.
+
+</Accordion>
+
+<Accordion title="useElementSize">
+
+```typescript
+useElementSize<T extends HTMLElement = HTMLDivElement>(): [React.RefObject<T>, ISize]
+```
+
+Attaches a `ResizeObserver` to a DOM element ref and returns `[ref, { width, height }]`, updating on resize.
+
+```tsx
+const [ref, { width }] = useElementSize<HTMLDivElement>();
+<div ref={ref}>width: {width}px</div>
+```
+
+</Accordion>
+
+<Accordion title="useWindowSize">
+
+```typescript
+useWindowSize(): { width: number; height: number }
+```
+
+Returns the current `window.innerWidth / innerHeight` and re-renders on `resize`.
+
+</Accordion>
+
+<Accordion title="useMediaContext">
+
+```typescript
+useMediaContext(): { isMobile: boolean; isTablet: boolean; isDesktop: boolean; xl: boolean }
+```
+
+Returns breakpoint booleans based on `window.innerWidth` using the library's default breakpoints.
+
+</Accordion>
+
+<Accordion title="useForceUpdate">
+
+```typescript
+useForceUpdate(): () => void
+```
+
+Returns a callback that, when called, forces the component to re-render by toggling a boolean state.
+
+</Accordion>
+
+<Accordion title="useActualValue">
+
+```typescript
+useActualValue<T>(value: T): React.MutableRefObject<T>
+```
+
+Returns a ref whose `.current` is always the latest `value`. Useful for reading the latest prop or state inside a stable callback without adding it to deps.
+
+</Accordion>
+
+<Accordion title="useActualCallback">
+
+```typescript
+useActualCallback<T extends (...args: any[]) => any>(
+  run: T,
+  deps?: any[]
+): T
+```
+
+Returns a stable callback that always calls the latest `run` via a ref. Avoids stale-closure bugs while keeping the function reference stable.
+
+</Accordion>
+
+<Accordion title="useActualState">
+
+```typescript
+useActualState<S>(initialState?: S | (() => S)): [React.MutableRefObject<S>, React.Dispatch<React.SetStateAction<S>>]
+```
+
+Like `useState` but returns `[stateRef, setState]` where `stateRef.current` always holds the latest state synchronously (avoiding the stale-state problem in closures).
+
+</Accordion>
+
+</AccordionGroup>

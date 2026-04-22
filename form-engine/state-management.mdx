@@ -1,0 +1,245 @@
+---
+title: "Form State Management: handler, onChange, and useOne"
+description: "How react-declarative manages form state automatically via the handler prop, debounced onChange, React 18 concurrent rendering, and the useOne modal hook."
+---
+
+react-declarative's `<One />` component owns all form state internally. You supply initial data through the `handler` prop, receive changes through the `change` callback, and never write reducer logic or `useState` for individual fields. This page explains how that pipeline works and how to use the utility hooks and functions that give you programmatic control when needed.
+
+## The `handler` prop
+
+`handler` is typed as `OneHandler<Data, Payload>`:
+
+```typescript
+type OneHandler<Data, Payload> =
+  | Data
+  | ((payload: Payload) => Data | null)
+  | ((payload: Payload) => Promise<Data | null>)
+  | null;
+```
+
+The three usable shapes are:
+
+<Tabs>
+  <Tab title="Static object">
+    Pass a plain data object when your initial values are already available synchronously.
+
+    ```tsx
+    <One
+      fields={fields}
+      handler={{ firstName: 'Jane', lastName: 'Doe', active: true }}
+      change={(data) => saveToStore(data)}
+    />
+    ```
+  </Tab>
+
+  <Tab title="Async function">
+    Pass an async function to load data from an API. `<One />` suspends the form until the promise resolves.
+
+    ```tsx
+    const handler = async () => {
+      const user = await fetch('/api/user/me').then((r) => r.json());
+      return user;
+    };
+
+    <One
+      fields={fields}
+      handler={handler}
+      fallback={(err) => console.error('Load failed', err)}
+      change={(data) => autosave(data)}
+    />
+    ```
+  </Tab>
+
+  <Tab title="Payload-aware function">
+    When you need access to the `payload` context (e.g. to pass a route ID), use a function that accepts payload.
+
+    ```tsx
+    const handler = async (payload: { userId: string }) => {
+      return await userService.getById(payload.userId);
+    };
+
+    <One
+      fields={fields}
+      payload={{ userId: routeParams.id }}
+      handler={handler}
+      change={(data) => updateUser(data)}
+    />
+    ```
+  </Tab>
+</Tabs>
+
+## The `change` callback
+
+`change` is called every time any field value changes. Its signature is:
+
+```typescript
+change?: (data: Data, initial: boolean) => void;
+```
+
+The `initial` flag is `true` on the first synthetic change event that fires after `handler` resolves (useful to distinguish loading from user edits).
+
+<Note>
+`change` is debounced by default to reduce redundant server calls during rapid typing. You can configure the debounce interval with `fieldDebounce` on `<One />`. React 18 concurrent rendering is used under the hood so the form stays responsive even on large schemas.
+</Note>
+
+```tsx
+<One
+  fields={fields}
+  handler={handler}
+  fieldDebounce={400}         // 400 ms debounce on text fields
+  change={(data, initial) => {
+    if (!initial) {
+      autoSaveToServer(data);
+    }
+  }}
+/>
+```
+
+## Reload and external updates
+
+Two subjects let you push data into an already-mounted form:
+
+| Prop | Type | Effect |
+|---|---|---|
+| `reloadSubject` | `TSubject<void>` | Re-runs `handler` and replaces form state |
+| `changeSubject` | `TSubject<Data>` | Replaces form data (calls `change` with `initial: true`) |
+| `updateSubject` | `TSubject<Data>` | Merges data (calls `change` with `initial: false`) |
+
+```tsx
+import { Subject } from 'react-declarative';
+
+const reloadSubject = new Subject<void>();
+
+// Trigger from outside (e.g. a "refresh" button)
+reloadSubject.next();
+
+<One
+  fields={fields}
+  handler={handler}
+  reloadSubject={reloadSubject}
+/>
+```
+
+## defaultValue patterns
+
+Each field can declare a static or computed default:
+
+```tsx
+// Static default
+{ type: FieldType.Checkbox, name: 'active', defaultValue: true }
+
+// Payload-aware default
+{ type: FieldType.Text, name: 'role', defaultValue: (payload) => payload.userRole }
+```
+
+When no `handler` is provided, `<One />` initialises form state entirely from the fields' `defaultValue` declarations.
+
+## getInitialData utility
+
+`getInitialData` generates a plain data object from a field schema, applying `defaultValue` for every named field. It is useful for resetting forms or for building the initial payload on the server side.
+
+```typescript
+import { getInitialData, FieldType, TypedField } from 'react-declarative';
+
+interface IFormData {
+  name: string;
+  active: boolean;
+  role: string;
+}
+
+const fields: TypedField<IFormData>[] = [
+  { type: FieldType.Text, name: 'name', title: 'Name' },
+  { type: FieldType.Switch, name: 'active', defaultValue: true, title: 'Active' },
+  { type: FieldType.Combo, name: 'role', defaultValue: 'viewer', title: 'Role',
+    itemList: ['admin', 'editor', 'viewer'] },
+];
+
+const emptyForm = getInitialData(fields);
+// => { name: '', active: true, role: 'viewer' }
+```
+
+`FieldType.Phony`, `FieldType.Button`, and `FieldType.Icon` fields are excluded from the output automatically.
+
+## getAvailableFields utility
+
+`getAvailableFields` walks the field schema and returns the subset of fields that are currently visible — respecting `isVisible`, `hidden`, and `features` props — for a given data snapshot.
+
+```typescript
+import { getAvailableFields } from 'react-declarative';
+
+const { visible, hidden } = getAvailableFields(
+  fields,
+  currentData,
+  payload,
+  userFeatures,  // optional string[]
+);
+
+// visible — array of IField entries the user can currently see
+// hidden  — array of IField entries currently hidden
+```
+
+This is useful for:
+- Generating an Excel/CSV export that only includes visible fields
+- Inline validation of data before submitting to the server
+- Auditing which fields are accessible to a given user role
+
+## useOne hook — modal form picker
+
+`useOne` opens a form schema inside a managed modal dialog and resolves to the submitted data. It is built on `ModalProvider` and works independently of any `<One />` in the page.
+
+```tsx
+import { useOne, FieldType, TypedField } from 'react-declarative';
+
+interface IInviteData {
+  email: string;
+  role: string;
+}
+
+const inviteFields: TypedField<IInviteData>[] = [
+  { type: FieldType.Text, name: 'email', title: 'Email', inputType: 'email' },
+  { type: FieldType.Combo, name: 'role', title: 'Role',
+    itemList: ['admin', 'editor', 'viewer'] },
+];
+
+function InviteButton() {
+  const pickOne = useOne<IInviteData>({
+    title: 'Invite user',
+    fields: inviteFields,
+  });
+
+  const handleClick = async () => {
+    const result = await pickOne().toPromise();
+    if (result) {
+      await sendInvite(result.email, result.role);
+    }
+  };
+
+  return <button onClick={handleClick}>Invite user</button>;
+}
+```
+
+The returned promise resolves to the final data object when the user confirms, or `null` when they cancel.
+
+<Tip>
+`useOneTyped` is a convenience wrapper around `useOne` that infers `TypedField<Data, Payload>` for the `fields` parameter, giving you full IntelliSense on the schema without explicit type annotations.
+</Tip>
+
+## API ref for programmatic control
+
+Pass an `apiRef` to `<One />` to call imperative methods on the running form instance:
+
+```tsx
+import { useRef } from 'react';
+import { One, IOneApi } from 'react-declarative';
+
+const apiRef = useRef<IOneApi>(null);
+
+// Trigger reload from a button
+const handleReset = () => apiRef.current?.reload();
+
+<One
+  fields={fields}
+  handler={handler}
+  apiRef={apiRef}
+/>
+```

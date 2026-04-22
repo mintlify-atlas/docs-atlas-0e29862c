@@ -1,0 +1,210 @@
+---
+title: "Scaffold2: Material Design App Shell"
+description: "Build a full Material Design app shell—sidebar, header, tabs, navigation—from an IScaffold2Group[] config array instead of manual JSX composition."
+keywords: ["scaffold2", "scaffold3", "app shell", "sidebar", "navigation", "material design", "react-declarative"]
+---
+
+The `Scaffold2` component in react-declarative implements the standard Material Design visual layout structure—app bar, drawer, content area, and optional tab strips—entirely through a config array rather than manual JSX composition. Access control is handled inline via async `isVisible` and `isDisabled` guards on every group and option.
+
+## Overview
+
+```tsx
+import {
+  Scaffold2,
+  type IScaffold2Group,
+} from 'react-declarative';
+```
+
+`Scaffold3` is an alternate variant that follows the same config shape and is suitable for applications with deeper navigation hierarchies. Both accept an `IScaffold2Group[]` array as their primary configuration prop.
+
+## IScaffold2Group interface
+
+```typescript
+interface IScaffold2Group<T = Payload> {
+  id: string;
+  label?: string;
+  icon?: React.ComponentType;
+  iconColor?: string;
+  noHeader?: boolean;
+  isVisible?: () => boolean | Promise<boolean>;
+  isDisabled?: () => boolean | Promise<boolean>;
+  children: IScaffold2Option<T>[];
+}
+```
+
+## IScaffold2Option interface
+
+Each item in `children` is an option. Options support nested sub-options via `options` and header tabs via `tabs`.
+
+```typescript
+interface IScaffold2Option<T = Payload> {
+  id: string;
+  label?: React.ReactNode;
+  icon?: React.ComponentType<any>;
+  iconColor?: string;
+  lifted?: boolean;
+  pin?: boolean;
+  sx?: SxProps<any>;
+  tabs?: IScaffold2Tab<T>[];
+  options?: IScaffold2Option<T>[];
+  isVisible?: (payload: T) => boolean | Promise<boolean>;
+  isDisabled?: (payload: T) => boolean | Promise<boolean>;
+}
+```
+
+<Note>
+  When `label` is omitted, the scaffold generates a display name automatically from the `id` value using snake_case-to-title-case conversion.
+</Note>
+
+## Config example
+
+The following example is taken directly from the react-declarative README and demo source:
+
+```tsx
+import PeopleIcon from '@mui/icons-material/People';
+import DnsRoundedIcon from '@mui/icons-material/DnsRounded';
+import PermMediaOutlinedIcon from '@mui/icons-material/PermMediaOutlined';
+import PublicIcon from '@mui/icons-material/Public';
+
+const options: IScaffold2Group[] = [
+  {
+    id: 'build',
+    label: 'Build',
+    children: [
+      {
+        id: 'authentication',
+        label: 'Authentication',
+        isVisible: async () => await ioc.authService.hasRole('unauthorized'),
+        icon: PeopleIcon,
+        tabs: [
+          { id: 'tab1', label: 'Tab1 in header' },
+          { id: 'tab2', label: 'Tab2 in header' },
+        ],
+        options: [
+          { id: 'tab1', label: 'Tab1 in side menu' },
+          { id: 'tab2', label: 'Tab2 in side menu' },
+        ],
+      },
+      {
+        id: 'Database',
+        label: 'Label is optional (can be generated automatically from ID in snake case)',
+        icon: DnsRoundedIcon,
+      },
+      {
+        id: 'Storage',
+        isDisabled: async () => await myAmazingGuard(),
+        icon: PermMediaOutlinedIcon,
+      },
+      {
+        id: 'Hosting',
+        icon: PublicIcon,
+      },
+    ],
+  },
+];
+```
+
+## Configuration steps
+
+<Steps>
+  <Step title="Define group structure">
+    Group options into logical sections. Each group has an `id`, an optional `label`, and an optional section-level `icon`. Set `noHeader` to suppress the section heading in the drawer.
+
+    ```tsx
+    const options: IScaffold2Group[] = [
+      {
+        id: 'main',
+        label: 'Main',
+        children: [],
+      },
+    ];
+    ```
+  </Step>
+
+  <Step title="Add navigation options">
+    Populate each group's `children` array with `IScaffold2Option` objects. Each option maps to a drawer list item.
+
+    ```tsx
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      icon: DashboardIcon,
+    }
+    ```
+  </Step>
+
+  <Step title="Attach header tabs (optional)">
+    When an option has a `tabs` array, the scaffold renders a `<Tabs>` strip in the app bar while that route is active.
+
+    ```tsx
+    {
+      id: 'settings',
+      label: 'Settings',
+      tabs: [
+        { id: 'general', label: 'General' },
+        { id: 'security', label: 'Security' },
+      ],
+    }
+    ```
+  </Step>
+
+  <Step title="Add async visibility and disabled guards">
+    Both group-level and option-level `isVisible` / `isDisabled` accept async functions, enabling role-based or remote-configuration-based access control with no extra wiring.
+
+    ```tsx
+    {
+      id: 'admin',
+      label: 'Admin',
+      isVisible: async () => await ioc.authService.hasRole('admin'),
+      isDisabled: async () => await myMaintenanceGuard(),
+      icon: AdminPanelSettingsIcon,
+    }
+    ```
+  </Step>
+
+  <Step title="Render Scaffold2">
+    Pass the config array to `Scaffold2` alongside navigation callback props.
+
+    ```tsx
+    <Scaffold2
+      options={options}
+      activeOptionPath={currentPath}
+      onOptionClick={(path) => history.push(path)}
+    />
+    ```
+  </Step>
+</Steps>
+
+## Layout structure
+
+`Scaffold2` provides the following Material Design layout regions out of the box:
+
+| Region | Description |
+|---|---|
+| App bar | Top navigation bar with title, optional tab strip, and action area |
+| Navigation drawer | Collapsible left sidebar with grouped option list |
+| Content area | The main routed view rendered as children |
+| Tab strip | Per-option header tabs defined in `IScaffold2Option.tabs` |
+
+<Tip>
+  Use `IScaffold2Option.pin = true` to keep a high-priority option visible at the top of the drawer list regardless of scroll position.
+</Tip>
+
+## Async guards
+
+Both `isVisible` and `isDisabled` at the group and option level are evaluated asynchronously on each render cycle. This lets you call an API or check a reactive store without managing additional local state:
+
+```tsx
+{
+  id: 'billing',
+  label: 'Billing',
+  isVisible: async () => {
+    const plan = await ioc.billingService.getCurrentPlan();
+    return plan !== 'free';
+  },
+  isDisabled: async () => {
+    return await ioc.maintenanceService.isBillingUnderMaintenance();
+  },
+  icon: PaymentIcon,
+}
+```

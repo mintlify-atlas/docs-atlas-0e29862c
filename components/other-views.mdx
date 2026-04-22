@@ -1,0 +1,518 @@
+---
+title: "Other View Components Reference"
+description: "Quick reference for react-declarative utility views: VirtualView, InfiniteView, FetchView, Async, If, CalendarView, TabsView, ChatView, and many more."
+keywords: ["virtualview", "infiniteview", "fetchview", "async", "if", "calendarview", "tabsview", "chatview", "react-declarative"]
+---
+
+react-declarative exports a large collection of single-purpose view components that handle common UI patterns—virtualization, data fetching, conditional rendering, offline detection, and more—without requiring custom hooks or boilerplate. This page provides a quick reference with usage examples for each group.
+
+## Virtualization and infinite scroll
+
+<AccordionGroup>
+  <Accordion title="VirtualView">
+    `VirtualView` renders a virtualized list using a transparent-API approach: only items currently in the viewport are mounted, but the scroll position and item count are managed automatically. Use `onDataRequest` to append items as the user scrolls.
+
+    ```tsx
+    import { VirtualView } from 'react-declarative';
+    import { Paper } from '@mui/material';
+
+    <VirtualView
+      component={Paper}
+      sx={{
+        width: "100%",
+        height: 250,
+        mb: 1,
+      }}
+      onDataRequest={() => {
+        setItems((items) => [
+          ...items,
+          ...[uuid(), uuid(), uuid(), uuid(), uuid()],
+        ]);
+      }}
+    >
+      {items.map((item) => (
+        <span key={item}>{item}</span>
+      ))}
+    </VirtualView>
+    ```
+
+    Key constants exported alongside the component: `VIRTUAL_VIEW_ROOT` and `VIRTUAL_VIEW_CHILD` for advanced slot targeting.
+  </Accordion>
+
+  <Accordion title="InfiniteView">
+    `InfiniteView` is an always-mounted scroll container that fires `onDataRequest` when the user reaches the bottom. Unlike `VirtualView`, all rendered children remain in the DOM. Use it when item count is modest or when you need accessibility-friendly markup.
+
+    ```tsx
+    import { InfiniteView } from 'react-declarative';
+
+    <InfiniteView
+      hasMore={hasMore}
+      loading={loading}
+      onDataRequest={async (initial) => {
+        const next = await fetchPage(page);
+        setItems((prev) => [...prev, ...next.rows]);
+        setHasMore(next.hasMore);
+      }}
+    >
+      {items.map((item) => (
+        <ItemCard key={item.id} item={item} />
+      ))}
+    </InfiniteView>
+    ```
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `hasMore` | `boolean` | Whether additional data is available. |
+    | `loading` | `boolean` | Suppresses additional `onDataRequest` calls while true. |
+    | `withScrollbar` | `boolean` | Show a native scrollbar (hidden by default). |
+    | `onDataRequest` | `(initial: boolean) => void` | Called with `initial=true` on mount, `false` on subsequent scroll events. |
+  </Accordion>
+</AccordionGroup>
+
+## Data fetching
+
+<AccordionGroup>
+  <Accordion title="FetchView">
+    `FetchView` resolves an array of async functions and passes their results to a render-prop child. It handles loading state and optional entry animations automatically.
+
+    ```tsx
+    import { FetchView } from 'react-declarative';
+
+    const PostList = () => {
+      const { getPosts } = useBlogApi();
+
+      const state = [getPosts];
+
+      return (
+        <FetchView state={state} animation="fadeIn">
+          {(posts) => (
+            <div>
+              {posts.map((post, idx) => (
+                <p key={idx}>
+                  <b>{post.title}</b> {post.body}
+                </p>
+              ))}
+            </div>
+          )}
+        </FetchView>
+      );
+    };
+    ```
+  </Accordion>
+
+  <Accordion title="Async">
+    `Async` is a port of Angular's `AsyncPipe`. It resolves a single async function as a render-prop child and shows a `Loader` component while pending. Useful for one-off async lookups inside a component tree.
+
+    ```tsx
+    import { Async } from 'react-declarative';
+    import { CircularProgress } from '@mui/material';
+
+    const PostItem = ({ id }) => {
+      const { getPostById } = useBlogApi();
+
+      return (
+        <Async payload={id} Loader={CircularProgress}>
+          {async (id) => {
+            const { title, body } = await getPostById(id);
+            return (
+              <div>
+                <p>{title}</p>
+                <p>{body}</p>
+              </div>
+            );
+          }}
+        </Async>
+      );
+    };
+    ```
+  </Accordion>
+
+  <Accordion title="If">
+    `If` is a port of Angular's structural directive. It evaluates a `condition` function (sync or async) and renders `children` when the result is truthy, otherwise renders the `Else` prop.
+
+    ```tsx
+    import { If } from 'react-declarative';
+
+    // Simple synchronous condition
+    const ProfilePage = () => {
+      const { hasRole } = useRoleApi();
+      return (
+        <If condition={() => hasRole("admin")}>
+          <button>The admin's button</button>
+        </If>
+      );
+    };
+
+    // Async condition with fallbacks
+    <If
+      payload={userId}
+      condition={async (userId) => {
+        return await ioc.permissionRequestService
+          .getOwnerContactVisibilityByUserId(userId);
+      }}
+      Loading="Loading"
+      Else="Hidden"
+    >
+      {owner_contact}
+    </If>
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Role-based and feature visibility
+
+<AccordionGroup>
+  <Accordion title="VisibilityView">
+    `VisibilityView` renders a config-driven form that lets users toggle field-level visibility for a given entity. It uses the same `IField[] | TypedField[]` field definitions as `One`.
+
+    ```tsx
+    import { VisibilityView, type IVisibilityGroup } from 'react-declarative';
+
+    const groups: IVisibilityGroup[] = [
+      {
+        name: "employee_visibility",
+        fields: employee_fields, // TypedField[]
+      },
+    ];
+
+    <VisibilityView
+      expandAll
+      data={{ employee_visibility: data }}
+      groups={groups}
+      onChange={({ employee_visibility }) => onChange(employee_visibility)}
+    />
+    ```
+  </Accordion>
+
+  <Accordion title="FeatureView">
+    `FeatureView` provides a feature-flag editor UI that maps named features to role-based on/off toggles. Combine it with `If` to selectively hide buttons, images, or text based on the active feature set.
+
+    ```tsx
+    import { FeatureView, type IFeatureGroup } from 'react-declarative';
+
+    const features: IFeatureGroup[] = [
+      {
+        title: "Employee",
+        expanded: true,
+        children: [
+          {
+            name: "employee_preview_modal",
+            label: "Employee preview modal",
+            description: "Click on row open preview modal",
+          },
+          {
+            name: "employee_toggle_inactive",
+            label: "Employee toggle inactive",
+            description: "Can toggle employee activity",
+          },
+        ],
+      },
+    ];
+
+    <FeatureView
+      expandAll
+      data={data}
+      features={features}
+      onChange={onChange}
+    />
+    ```
+  </Accordion>
+
+  <Accordion title="AuthView">
+    `AuthView` renders a full-screen login form backed by the `One` form engine. Pass a `fields` array to define the login form layout and an `onSubmit` handler to process credentials.
+
+    ```tsx
+    import { AuthView } from 'react-declarative';
+
+    <AuthView
+      appName="My App"
+      fields={loginFields}
+      onSubmit={async (data) => {
+        await ioc.authService.login(data.email, data.password);
+      }}
+    />
+    ```
+  </Accordion>
+
+  <Accordion title="ErrorView">
+    `ErrorView` renders a full-screen error state with an app logo, a descriptive message, and a reload button. Typically used as a top-level error boundary fallback.
+
+    ```tsx
+    import { ErrorView } from 'react-declarative';
+
+    <ErrorView
+      appName="My App"
+      contentLabel="Something went wrong."
+      buttonLabel="Reload"
+      onButtonClick={() => window.location.reload()}
+    />
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Date and layout
+
+<AccordionGroup>
+  <Accordion title="CalendarView">
+    `CalendarView` renders an interactive month calendar with month and year selection. It accepts `dayjs`-compatible `date`, `minDate`, and `maxDate` props and fires `onChange` with the selected `dayjs` object.
+
+    ```tsx
+    import { CalendarView } from 'react-declarative';
+    import dayjs from 'dayjs';
+
+    <CalendarView
+      date={dayjs()}
+      minDate={dayjs('2020-01-01')}
+      maxDate={dayjs('2030-12-31')}
+      onChange={(date) => setSelectedDate(date)}
+    />
+    ```
+  </Accordion>
+
+  <Accordion title="TabsView">
+    `TabsView` combines a Material UI `Tabs` header with an outlet-based routing system. Define tab steps and outlet components in the same way as `WizardView`.
+
+    ```tsx
+    import { TabsView } from 'react-declarative';
+
+    <TabsView
+      pathname={currentPath}
+      steps={tabSteps}
+      routes={tabRoutes}
+    />
+    ```
+  </Accordion>
+
+  <Accordion title="TreeView">
+    `TreeView` renders a searchable, multi-select tree using an `INode[]` hierarchy. Backed by MUI `Autocomplete` with checkbox support.
+
+    ```tsx
+    import { TreeView } from 'react-declarative';
+
+    <TreeView
+      items={categoryTree}
+      value={selectedIds}
+      onChange={(ids) => setSelectedIds(ids)}
+    />
+    ```
+
+    Each `INode` has an `id`, `label`, and optional `children: INode[]` for nesting.
+  </Accordion>
+
+  <Accordion title="GridView">
+    `GridView` combines a data grid (`Grid`) with a card/tile view for mobile breakpoints. It switches between desktop table and mobile card layout automatically using `useMediaContext`.
+
+    ```tsx
+    import { GridView } from 'react-declarative';
+
+    <GridView
+      columns={columns}
+      handler={fetchRows}
+      label={(row) => row.name}
+      mobileItem={(row) => <MobileCard row={row} />}
+    />
+    ```
+  </Accordion>
+
+  <Accordion title="CardView">
+    `CardView` renders a virtualized card list with optional search and bulk operations. It is backed by `VirtualView` and supports the same selection and operation patterns as `List`.
+
+    ```tsx
+    import { CardView } from 'react-declarative';
+
+    <CardView
+      handler={fetchItems}
+      operations={operations}
+      itemSx={{ mb: 1 }}
+    />
+    ```
+  </Accordion>
+
+  <Accordion title="RecordView">
+    `RecordView` renders a key-value inspector for arbitrary objects. It auto-formats keys with title casing and supports nested expansion, search, and custom format callbacks.
+
+    ```tsx
+    import { RecordView } from 'react-declarative';
+
+    <RecordView
+      data={selectedRecord}
+      withExpandAll
+      search={searchQuery}
+      onSearchChanged={setSearchQuery}
+    />
+    ```
+  </Accordion>
+
+  <Accordion title="ChatView">
+    `ChatView` provides a chat UI driven by a `ChatController` instance. The controller manages message history and action requests (text input, select, multi-select, file upload, audio).
+
+    ```tsx
+    import { ChatView, ChatController } from 'react-declarative';
+
+    const [chatCtl] = useState(() => new ChatController());
+
+    useMemo(async () => {
+      await chatCtl.addMessage({
+        type: 'text',
+        content: "Hello, what's your name?",
+        self: false,
+      });
+      const name = await chatCtl.setActionRequest({ type: 'text' });
+      await chatCtl.addMessage({
+        type: 'text',
+        content: `Nice to meet you, ${name.value}!`,
+        self: false,
+      });
+    }, [chatCtl]);
+
+    return <ChatView chatController={chatCtl} />;
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Scroll and animation
+
+<AccordionGroup>
+  <Accordion title="ScrollView">
+    `ScrollView` provides a scroll container with absolute-positioned content and controlled overflow axes. Use the `SCROLL_VIEW_TARGER` constant to target the scroll element programmatically.
+
+    ```tsx
+    import { ScrollView } from 'react-declarative';
+
+    <ScrollView withScrollbar>
+      <LongContent />
+    </ScrollView>
+    ```
+  </Accordion>
+
+  <Accordion title="FadeView">
+    `FadeView` adds fade gradients to the edges of a scrollable container, indicating that more content exists beyond the visible area.
+
+    ```tsx
+    import { FadeView } from 'react-declarative';
+
+    <FadeView color="#ffffff" disableBottom>
+      <HorizontalList />
+    </FadeView>
+    ```
+  </Accordion>
+
+  <Accordion title="RevealView">
+    `RevealView` wraps its children in a configurable entrance animation. The `animation` prop accepts the same values as `FetchView` (e.g. `"fadeIn"`).
+
+    ```tsx
+    import { RevealView } from 'react-declarative';
+
+    <RevealView animation="fadeIn" delay={200}>
+      <DashboardCard />
+    </RevealView>
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Connectivity and polling
+
+<AccordionGroup>
+  <Accordion title="PingView">
+    `PingView` hides its children and shows an `Offline` component when a custom `ping` function returns `false`. The ping runs on a configurable `delay` interval.
+
+    ```tsx
+    import { PingView } from 'react-declarative';
+
+    <PingView
+      ping={async () => {
+        try {
+          await fetch('/api/health');
+          return true;
+        } catch {
+          return false;
+        }
+      }}
+      delay={5_000}
+      Offline={<ServiceUnavailable />}
+    >
+      <App />
+    </PingView>
+    ```
+  </Accordion>
+
+  <Accordion title="OfflineView">
+    `OfflineView` uses the browser's `navigator.onLine` flag, optionally augmented by HTTP polling, to detect connectivity. It renders its children when online and the `Offline` component otherwise.
+
+    ```tsx
+    import { OfflineView } from 'react-declarative';
+
+    <OfflineView
+      withPolling
+      config={{
+        url: '/api/ping',
+        method: 'GET',
+        interval: 10_000,
+        timeout: 5_000,
+      }}
+      Offline={<NoConnectionBanner />}
+    >
+      <MainContent />
+    </OfflineView>
+    ```
+  </Accordion>
+
+  <Accordion title="WaitView">
+    `WaitView` polls a `condition` function on a `delay` interval and renders the `Content` component once the condition resolves to `true`. Useful for waiting on background initialization.
+
+    ```tsx
+    import { WaitView } from 'react-declarative';
+
+    <WaitView
+      condition={async () => await ioc.initService.isReady()}
+      delay={1_000}
+      totalAttempts={30}
+      Content={ReadyContent}
+      Loader={<CircularProgress />}
+      onDone={(attempts) => console.log(`Ready after ${attempts} attempts`)}
+    />
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Overlay and access control
+
+<AccordionGroup>
+  <Accordion title="PortalView">
+    `PortalView` is a class component wrapper around `ReactDOM.createPortal`. It appends a `<div>` to `document.body` and removes it on unmount, making it suitable for modals and overlays that must escape CSS stacking contexts.
+
+    ```tsx
+    import { PortalView } from 'react-declarative';
+
+    <PortalView>
+      <MyModal onClose={handleClose} />
+    </PortalView>
+    ```
+  </Accordion>
+
+  <Accordion title="SecretView">
+    `SecretView` detects a numeric keypad sequence (by default 6 digits) entered anywhere on the page and opens a modal dialog to confirm the code. Use it to gate developer or admin features behind a PIN.
+
+    ```tsx
+    import { SecretView } from 'react-declarative';
+
+    <SecretView
+      enabled
+      title="Developer mode"
+      description="Enter the PIN to unlock developer tools"
+      digits={6}
+      onCode={(code) => {
+        if (code === 123456) enableDevMode();
+      }}
+    >
+      <App />
+    </SecretView>
+    ```
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `enabled` | `boolean` | Activates the key listener. |
+    | `digits` | `number` | Number of digits in the code (default: 6). |
+    | `onCode` | `(code: number) => void` | Called with the numeric code once all digits are entered. |
+  </Accordion>
+</AccordionGroup>

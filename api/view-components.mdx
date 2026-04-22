@@ -1,0 +1,661 @@
+---
+title: "View Components Reference — react-declarative"
+description: "Complete reference for every view component exported by react-declarative: async fetching, virtualization, kanban, wizards, calendars, RBAC views, and more."
+---
+
+react-declarative ships a large collection of view components that handle asynchronous data loading, animation, list virtualization, RBAC visibility gating, calendar rendering, kanban boards, wizard flows, and chat interfaces. This page documents every view component exported from the library with key props and usage examples.
+
+## Async & Conditional Views
+
+<AccordionGroup>
+
+<Accordion title="FetchView — async data with animation">
+
+Fetches one or more async values and renders children once all promises resolve, showing a loader and an optional reveal animation in the meantime.
+
+```tsx
+import { FetchView } from 'react-declarative';
+
+<FetchView
+  state={() => fetchUser(userId)}
+  animation="fadeIn"
+>
+  {(user) => <div>{user.name}</div>}
+</FetchView>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `state` | `(payload: P) => Promise<A>` or tuple | One async factory or a tuple of up to 10 async factories |
+| `payload` | `P` | Value forwarded to `state` on each render |
+| `animation` | `string` | CSS animation name applied to the reveal wrapper |
+| `fallback` | `(e: Error) => void` | Called when the fetch throws |
+| `onLoadStart` | `() => void` | Fired before the fetch begins |
+| `onLoadEnd` | `(isOk: boolean) => void` | Fired after the fetch completes |
+| `Loader` | `React.ComponentType` | Override the default loading placeholder |
+| `children` | `(data: A, ...rest) => React.ReactNode` | Render prop receiving resolved values |
+
+<Note>When `state` returns a tuple of promises the children render prop receives all values positionally: `(a, b, c) => ...`.</Note>
+
+</Accordion>
+
+<Accordion title="Async — Angular-style async pipe">
+
+Evaluates an async factory inside JSX and renders its result when it resolves. Modelled after Angular's `async` pipe.
+
+```tsx
+import { Async } from 'react-declarative';
+
+<Async payload={userId}>
+  {async (id) => {
+    const user = await fetchUser(id);
+    return <span>{user.name}</span>;
+  }}
+</Async>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `children` | `(payload: P) => Promise<React.ReactNode>` | Async factory |
+| `payload` | `P` | Forwarded to the factory on each render |
+| `fallback` | `(e: Error) => void` | Error handler |
+| `Loader` | `React.ComponentType` | Loading placeholder |
+
+</Accordion>
+
+<Accordion title="If — conditional rendering with async guard">
+
+Renders children only when an async condition resolves to `true`. Re-evaluates whenever `payload` changes.
+
+```tsx
+import { If } from 'react-declarative';
+
+<If condition={() => checkPermission('admin')}>
+  <AdminPanel />
+</If>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `condition` | `(payload: P) => boolean \| Promise<boolean>` | Guard function |
+| `payload` | `P` | Forwarded to `condition` |
+| `fallback` | `React.ReactNode` | Rendered when condition is `false` |
+| `Loader` | `React.ComponentType` | Loading placeholder |
+
+</Accordion>
+
+</AccordionGroup>
+
+## Virtualization & Infinite Scroll
+
+<AccordionGroup>
+
+<Accordion title="VirtualView — virtualized list">
+
+Renders only the visible rows of a large dataset using a virtual window, dramatically cutting DOM node count.
+
+```tsx
+import { VirtualView } from 'react-declarative';
+
+<VirtualView
+  items={bigList}
+  minRowHeight={48}
+>
+  {({ item }) => <div>{item.label}</div>}
+</VirtualView>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `items` | `T[]` | Full dataset |
+| `minRowHeight` | `number` | Minimum height of each row in px |
+| `children` | `(props: { item: T; index: number }) => React.ReactNode` | Row render prop |
+| `className` | `string` | Root element class |
+
+</Accordion>
+
+<Accordion title="InfiniteView — infinite scroll list">
+
+Fetches and appends new pages as the user scrolls to the bottom. Integrates with the library's pagination utilities.
+
+```tsx
+import { InfiniteView } from 'react-declarative';
+
+<InfiniteView
+  handler={async (page) => await loadPage(page)}
+  hasMore={hasMore}
+>
+  {(items) => items.map(item => <Row key={item.id} item={item} />)}
+</InfiniteView>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `handler` | `(page: number) => Promise<T[]>` | Page fetch callback |
+| `hasMore` | `boolean` | Whether more pages exist |
+| `onLoadStart` | `() => void` | Fired before each page fetch |
+| `onLoadEnd` | `(isOk: boolean) => void` | Fired after each fetch |
+| `children` | `(items: T[]) => React.ReactNode` | Render the accumulated list |
+
+</Accordion>
+
+</AccordionGroup>
+
+## Board & Layout Views
+
+<AccordionGroup>
+
+<Accordion title="KanbanView — kanban board">
+
+Renders a multi-column drag-and-drop kanban board driven by data.
+
+```tsx
+import { KanbanView } from 'react-declarative';
+
+<KanbanView
+  columns={columns}
+  items={items}
+  onChangeColumn={(item, column) => updateItem(item.id, column)}
+/>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `columns` | `IBoardColumn[]` | Column definitions with `id`, `label`, `color` |
+| `items` | `IBoardItem[]` | Card data; each item references a `column` id |
+| `onChangeColumn` | `(item, columnId) => void` | Fired when a card is dragged to a new column |
+| `payload` | `any` | Extra data passed to column/card render slots |
+
+</Accordion>
+
+<Accordion title="GridView — data grid">
+
+A sortable, selectable data grid with column configuration, row actions, and optional bulk operations.
+
+```tsx
+import { GridView } from 'react-declarative';
+
+<GridView
+  columns={columns}
+  handler={async () => rows}
+  onAction={(action, rows) => handleAction(action, rows)}
+/>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `columns` | `IGridColumn[]` | Column definitions |
+| `handler` | `() => Promise<T[]>` | Data loader |
+| `onAction` | `(action: IGridAction, rows: T[]) => void` | Row/bulk action handler |
+| `selectionMode` | `SelectionMode` | `"none"`, `"single"`, `"multiple"` |
+
+</Accordion>
+
+<Accordion title="TreeView — tree data display">
+
+Renders a hierarchical tree from a flat node array using parent/child id references.
+
+```tsx
+import { TreeView } from 'react-declarative';
+
+<TreeView
+  items={[
+    { id: '1', label: 'Root', parent: null },
+    { id: '2', label: 'Child', parent: '1' },
+  ]}
+  onNodeSelect={(node) => console.log(node)}
+/>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `items` | `ITreeViewNode[]` | Flat list of `{ id, label, parent }` objects |
+| `onNodeSelect` | `(node: ITreeViewNode) => void` | Fired when a node is clicked |
+| `defaultExpanded` | `string[]` | IDs of nodes expanded by default |
+
+</Accordion>
+
+</AccordionGroup>
+
+## Navigation Views
+
+<AccordionGroup>
+
+<Accordion title="WizardView, WizardNavigation, WizardContainer — wizard flow">
+
+Orchestrate multi-step forms. `WizardView` manages step routing; `WizardNavigation` renders the step indicator; `WizardContainer` wraps a single step.
+
+```tsx
+import { WizardView, WizardNavigation, WizardContainer } from 'react-declarative';
+
+<WizardView
+  history={history}
+  steps={[
+    { id: 'step1', label: 'Basics', element: StepOne },
+    { id: 'step2', label: 'Details', element: StepTwo },
+  ]}
+>
+  {(step) => (
+    <WizardContainer>
+      <WizardNavigation />
+      <step.element />
+    </WizardContainer>
+  )}
+</WizardView>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `steps` | `IWizardStep[]` | Array of `{ id, label, element }` descriptors |
+| `history` | `History` | Router history instance |
+| `payload` | `any` | Data forwarded to each step |
+| `onFinish` | `() => void` | Fired after the last step completes |
+
+</Accordion>
+
+<Accordion title="TabsView — tab-based navigation">
+
+Renders a tab bar that maps to routed outlet components.
+
+```tsx
+import { TabsView } from 'react-declarative';
+
+<TabsView
+  history={history}
+  tabs={[
+    { id: 'overview', label: 'Overview', element: Overview },
+    { id: 'settings', label: 'Settings', element: Settings },
+  ]}
+/>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `tabs` | `ITabsStep[]` | Tab definitions with `id`, `label`, `element` |
+| `history` | `History` | Router history |
+| `payload` | `any` | Forwarded to each tab component |
+
+</Accordion>
+
+<Accordion title="CalendarView — calendar with tiles">
+
+Renders a monthly calendar where each day can display custom tiles loaded from an async handler.
+
+```tsx
+import { CalendarView } from 'react-declarative';
+
+<CalendarView
+  handler={async ({ year, month }) => loadEvents(year, month)}
+  tileMode={TileMode.Card}
+/>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `handler` | `(req: ICalendarRequest) => Promise<ICalendarTile[]>` | Tile data loader per month |
+| `tileMode` | `TileMode` | Visual style of tiles |
+| `payload` | `any` | Forwarded to `handler` |
+| `onTileClick` | `(tile: ICalendarTile) => void` | Tile click handler |
+
+</Accordion>
+
+</AccordionGroup>
+
+## CRUD Views
+
+<AccordionGroup>
+
+<Accordion title="CardView — CRUD card grid">
+
+A grid of cards supporting create, read, update, and delete operations with per-card actions and bulk operations.
+
+```tsx
+import { CardView } from 'react-declarative';
+
+<CardView
+  handler={async () => fetchItems()}
+  actions={[
+    { label: 'Edit', action: 'edit' },
+    { label: 'Delete', action: 'delete' },
+  ]}
+  onAction={(action, item) => handleCardAction(action, item)}
+/>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `handler` | `() => Promise<T[]>` | Loads the card items |
+| `actions` | `ICardViewAction[]` | Per-card context menu actions |
+| `operations` | `ICardViewOperation[]` | Bulk operation buttons |
+| `onAction` | `(action, item) => void` | Action handler |
+| `onOperation` | `(operation, items) => void` | Bulk operation handler |
+
+</Accordion>
+
+<Accordion title="RecordView — record detail view">
+
+Renders a detail record with field-level conditional visibility and async data loading.
+
+```tsx
+import { RecordView } from 'react-declarative';
+
+<RecordView
+  fields={fields}
+  handler={() => fetchRecord(id)}
+/>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `fields` | `TypedField[]` | Field schema same as `One` component |
+| `handler` | `() => Promise<Data>` | Loads the record data |
+| `payload` | `any` | Forwarded to computed field props |
+
+</Accordion>
+
+<Accordion title="ChatView — chat interface">
+
+A full chat UI with message bubbles, an input bar, and async message dispatch.
+
+```tsx
+import { ChatView, ChatController } from 'react-declarative';
+
+const controller = new ChatController();
+
+<ChatView
+  controller={controller}
+  onSend={async (text) => {
+    await sendMessage(text);
+    controller.push({ role: 'assistant', text: 'Got it!' });
+  }}
+/>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `controller` | `ChatController` | Holds the message list and exposes `push`/`clear` |
+| `onSend` | `(text: string) => Promise<void>` | Called when the user submits a message |
+| `placeholder` | `string` | Input placeholder text |
+
+</Accordion>
+
+</AccordionGroup>
+
+## Auth & Error Views
+
+<AccordionGroup>
+
+<Accordion title="AuthView — authentication gate">
+
+Wraps its children behind an async permission check, rendering a login/locked placeholder until the check resolves.
+
+```tsx
+import { AuthView } from 'react-declarative';
+
+<AuthView
+  condition={() => authService.isAuthenticated()}
+  onAuthFailed={() => history.push('/login')}
+>
+  <Dashboard />
+</AuthView>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `condition` | `() => boolean \| Promise<boolean>` | Auth predicate |
+| `onAuthFailed` | `() => void` | Called when auth check returns `false` |
+| `children` | `React.ReactNode` | Protected content |
+
+</Accordion>
+
+<Accordion title="ErrorView — error placeholder">
+
+Renders a user-friendly error state, optionally with a retry callback.
+
+```tsx
+import { ErrorView } from 'react-declarative';
+
+<ErrorView
+  error="Failed to load data"
+  onRetry={() => reload()}
+/>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `error` | `string \| Error` | Error message or object |
+| `onRetry` | `() => void` | Optional retry button callback |
+
+</Accordion>
+
+<Accordion title="ErrorBoundary — React error boundary">
+
+Standard React error boundary that catches render-phase errors and displays a fallback UI.
+
+```tsx
+import { ErrorBoundary } from 'react-declarative';
+
+<ErrorBoundary fallback={<ErrorView error="Unexpected error" />}>
+  <App />
+</ErrorBoundary>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `fallback` | `React.ReactNode` | Content shown when an error is caught |
+| `onError` | `(error: Error, info: React.ErrorInfo) => void` | Optional error reporter |
+
+</Accordion>
+
+</AccordionGroup>
+
+## RBAC & Configuration Views
+
+<AccordionGroup>
+
+<Accordion title="VisibilityView — field-level RBAC">
+
+Allows runtime control over field visibility in a `One`/form by checking against a visibility map.
+
+```tsx
+import { VisibilityView } from 'react-declarative';
+
+<VisibilityView
+  groups={visibilityGroups}
+  data={visibilityData}
+  onChange={(data) => saveVisibility(data)}
+/>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `groups` | `IVisibilityGroup[]` | Grouped visibility toggles |
+| `data` | `Record<string, boolean>` | Current visibility state |
+| `onChange` | `(data) => void` | Called when a toggle changes |
+
+</Accordion>
+
+<Accordion title="FeatureView — feature-flag configuration">
+
+Renders a tree of feature flags with group labels and tri-state toggles.
+
+```tsx
+import { FeatureView } from 'react-declarative';
+
+<FeatureView
+  features={featureGroups}
+  data={featureData}
+  onChange={(data) => saveFeatures(data)}
+/>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `features` | `IFeatureGroup[]` | Feature flag groups |
+| `data` | `Record<string, FeatureType>` | Current flag values |
+| `onChange` | `(data) => void` | State change handler |
+
+</Accordion>
+
+</AccordionGroup>
+
+## Animation Views
+
+<AccordionGroup>
+
+<Accordion title="ScrollView, FadeView, ScaleView, RevealView">
+
+Utility wrapper components that apply entrance animations to their children.
+
+<CodeGroup>
+
+```tsx ScrollView
+import { ScrollView } from 'react-declarative';
+
+// Wraps children in a scrollable container with styled scrollbars
+<ScrollView>
+  <LongContent />
+</ScrollView>
+```
+
+```tsx FadeView
+import { FadeView } from 'react-declarative';
+
+// Fades children in when `visible` becomes true
+<FadeView visible={isLoaded}>
+  <Content />
+</FadeView>
+```
+
+```tsx ScaleView
+import { ScaleView } from 'react-declarative';
+
+// Scales children from 0 to 1 on mount
+<ScaleView>
+  <Dialog />
+</ScaleView>
+```
+
+```tsx RevealView
+import { RevealView } from 'react-declarative';
+
+// Slides/reveals children with a configurable animation
+<RevealView animation="slideUp" visible={show}>
+  <Panel />
+</RevealView>
+```
+
+</CodeGroup>
+
+All four components accept `className` and `style` props and forward remaining props to the root element.
+
+</Accordion>
+
+</AccordionGroup>
+
+## Status Views
+
+<AccordionGroup>
+
+<Accordion title="PingView — connectivity polling">
+
+Polls a URL at a configurable interval and renders different children based on reachability.
+
+```tsx
+import { PingView } from 'react-declarative';
+
+<PingView
+  url="/api/health"
+  interval={5000}
+  fallback={<Offline />}
+>
+  <Online />
+</PingView>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `url` | `string` | Health-check URL |
+| `interval` | `number` | Poll interval in ms (default 5 000) |
+| `fallback` | `React.ReactNode` | Shown while unreachable |
+| `children` | `React.ReactNode` | Shown while reachable |
+
+</Accordion>
+
+<Accordion title="WaitView — conditional content gate">
+
+Renders children only after a condition becomes truthy, polling on an interval until it does.
+
+```tsx
+import { WaitView } from 'react-declarative';
+
+<WaitView condition={() => store.isReady}>
+  <App />
+</WaitView>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `condition` | `() => boolean \| Promise<boolean>` | Readiness check |
+| `interval` | `number` | Poll interval in ms |
+| `children` | `React.ReactNode` | Content rendered once ready |
+
+</Accordion>
+
+<Accordion title="OfflineView — offline detection">
+
+Listens to `navigator.onLine` and renders a fallback when the browser goes offline.
+
+```tsx
+import { OfflineView } from 'react-declarative';
+
+<OfflineView fallback={<div>You are offline</div>}>
+  <App />
+</OfflineView>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `fallback` | `React.ReactNode` | Shown when offline |
+| `children` | `React.ReactNode` | Shown when online |
+
+</Accordion>
+
+</AccordionGroup>
+
+## Metro Dashboard View
+
+<AccordionGroup>
+
+<Accordion title="MetroView — metro tile dashboard">
+
+Renders a responsive grid of metro-style tiles from a route/group configuration, producing a Windows-Metro-style dashboard.
+
+```tsx
+import { MetroView, IMetroGroup } from 'react-declarative';
+
+const groups: IMetroGroup[] = [
+  {
+    id: 'analytics',
+    label: 'Analytics',
+    routes: [
+      { id: 'revenue', label: 'Revenue', icon: ChartIcon, path: '/analytics/revenue' },
+    ],
+  },
+];
+
+<MetroView
+  history={history}
+  groups={groups}
+/>
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `groups` | `IMetroGroup[]` | Tile group definitions |
+| `history` | `History` | Router history for navigation |
+| `payload` | `any` | Forwarded to tile render slots |
+
+</Accordion>
+
+</AccordionGroup>

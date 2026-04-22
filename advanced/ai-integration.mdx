@@ -1,0 +1,261 @@
+---
+title: 'Generating Forms with AI and LLMs'
+description: 'Use ChatGPT, Claude, or any LLM to generate TypedField schemas for react-declarative, taking advantage of its flat JSON structure and small context footprint.'
+keywords: ['AI', 'LLM', 'code generation', 'TypedField', 'ChatGPT', 'Claude', 'prompt', 'playground', 'react-declarative']
+---
+
+React-declarative is unusually well-suited for AI-assisted development because a complete form is described as a single flat JSON array — no JSX nesting, no hooks, no manually wired state. A language model can produce or modify a `TypedField[]` schema in one shot without needing to understand the full application abstraction stack.
+
+## Why declarative schemas work well with LLMs
+
+Standard React components require a model to reason about multiple abstraction layers simultaneously: JSX structure, state hooks, event handlers, and validation logic. Changing one layer (say, adding a field) often requires changes in several others. react-declarative collapses those layers: the schema drives rendering, state, and validation, so the model only needs to output a data structure.
+
+The official documentation puts it this way:
+
+> The problem of AI is that the context window cannot load all project abstraction layers at once, so when generating code we have to manually change the prompt based on the current abstraction level. The declarative view engine does state management (lower abstraction level) automatically under the hood so it is the best for AI.
+
+A minimal form schema fits comfortably inside any LLM context window, and the `TypedField` interface is self-documenting enough that well-known models already have it in their training data.
+
+## AI workflow
+
+<Steps>
+  <Step title="Choose a sample schema">
+    The repository ships sample schemas specifically written to serve as LLM prompts. Each one shows a realistic `TypedField[]` array and a screenshot of the rendered result.
+
+    <AccordionGroup>
+      <Accordion title="Available sample schemas">
+
+      | Sample | Description |
+      |--------|-------------|
+      | `order_info` | Multi-section form with text, combo, date, and items fields |
+      | `typography` | Showcase of layout and display field types |
+      | `settings_page` | Switch, slider, and combo-based settings UI |
+      | `product_shape` | E-commerce product form |
+      | `profile_card` | User profile with rating and avatar |
+      | `gallery_of_controls` | One of every field type |
+      | `variant_form` | Conditional field visibility |
+      | `custom_jsx` | Embedding arbitrary React components |
+      | `machine_learning` | Input form for ML parameters |
+      | `dashboard` | KPI cards and chart placeholders |
+      | `adaptive_form` | Responsive desktop/tablet/phone columns |
+      | `account_info` | Account settings form |
+      | `login_form` | Authentication form with icon button |
+      | `crypto_form` | Wallet / crypto asset form |
+      | `kpi_review` | Review form with rating and summary |
+
+      </Accordion>
+    </AccordionGroup>
+
+    All samples live in `docs/sample/` in the repository. You can copy the raw Markdown of any sample directly into the chat.
+  </Step>
+
+  <Step title="Open your LLM of choice">
+    ChatGPT, Claude, Bing Copilot, Perplexity, and Google Gemini all have working knowledge of react-declarative. Claude in particular handles complex multi-section schemas reliably.
+
+    <Info>
+      If you want answers grounded in the latest docs, clone the repository and load the `docs/` directory as a LocalDocs collection in [GPT4All](https://www.nomic.ai/gpt4all). The Markdown files are formatted for text-embedding vectors.
+    </Info>
+  </Step>
+
+  <Step title="Paste the sample and write your prompt">
+    Paste the raw content of a sample schema into the chat, then describe what you want built. The pattern that works best is:
+
+    ```text
+    Read the code from the markdown file and make me a sign in form by using same schema
+    ```
+
+    Because the sample already demonstrates the interface conventions, the model can infer types, nesting, and property names from the example alone.
+  </Step>
+
+  <Step title="Verify output in the playground">
+    Paste the generated `TypedField[]` array into the react-declarative playground to check it renders correctly before adding it to your project.
+
+    **Playground:** [https://react-declarative-playground.github.io/](https://react-declarative-playground.github.io/)
+
+    The playground accepts raw TypeScript and shows the live form with no build step. It is the fastest way to iterate on schema changes.
+  </Step>
+</Steps>
+
+## Example: generating a login form
+
+The `login_form` sample produces the following schema. Paste this into your LLM with the prompt above and ask for a registration form, a password reset form, or any other variation:
+
+```tsx
+import { TypedField, FieldType, ActionBounce, ActionState, Subject } from 'react-declarative';
+
+const sleep = (delay = 1_000) =>
+  new Promise<void>((res) => setTimeout(() => res(), delay));
+
+const stateSubject = new Subject<ActionState>();
+
+export const fields: TypedField[] = [
+  {
+    type: FieldType.Box,
+    sx: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '80vh',
+    },
+    child: {
+      type: FieldType.Layout,
+      customLayout: ({ children }) => (
+        <ActionBounce transparentPaper stateSubject={stateSubject}>
+          {children}
+        </ActionBounce>
+      ),
+      child: {
+        type: FieldType.Paper,
+        sx: { width: '256px' },
+        fields: [
+          {
+            type: FieldType.Typography,
+            typoVariant: 'h4',
+            placeholder: 'Sign in',
+          },
+          {
+            type: FieldType.Text,
+            fieldRightMargin: '0',
+            fieldBottomMargin: '2',
+            outlined: true,
+            name: 'login',
+          },
+          {
+            type: FieldType.Text,
+            fieldRightMargin: '0',
+            fieldBottomMargin: '1',
+            outlined: true,
+            inputType: 'password',
+            name: 'password',
+          },
+          {
+            type: FieldType.Icon,
+            fieldRightMargin: '0',
+            fieldBottomMargin: '0',
+            iconBackground: 'warning',
+            iconSize: 48,
+            click: async (name, e, data) => {
+              stateSubject.next(ActionState.Active);
+              await sleep();
+              stateSubject.next(ActionState.Succeed);
+              await sleep();
+              stateSubject.next(ActionState.Abort);
+              alert(JSON.stringify(data, null, 2));
+            },
+          },
+        ],
+      },
+    },
+  },
+];
+```
+
+## Example: a multi-section data form
+
+The `order_info` sample shows how to structure a form with multiple `FieldType.Paper` sections, responsive columns, and a mix of text, date, and combo fields:
+
+```tsx
+import { TypedField, FieldType } from 'react-declarative';
+
+export const fields: TypedField[] = [
+  {
+    type: FieldType.Paper,
+    fieldBottomMargin: '1',
+    fields: [
+      {
+        type: FieldType.Typography,
+        typoVariant: 'h6',
+        placeholder: 'General Information',
+      },
+      {
+        type: FieldType.Text,
+        desktopColumns: '4',
+        tabletColumns: '4',
+        phoneColumns: '12',
+        outlined: false,
+        name: 'first_name',
+        title: 'First Name',
+      },
+      {
+        type: FieldType.Text,
+        desktopColumns: '4',
+        tabletColumns: '4',
+        phoneColumns: '12',
+        outlined: false,
+        name: 'last_name',
+        title: 'Last Name',
+      },
+      {
+        type: FieldType.Text,
+        desktopColumns: '4',
+        tabletColumns: '4',
+        phoneColumns: '12',
+        outlined: false,
+        name: 'email',
+        title: 'Email',
+      },
+    ],
+  },
+  {
+    type: FieldType.Paper,
+    fieldBottomMargin: '1',
+    fields: [
+      {
+        type: FieldType.Typography,
+        typoVariant: 'h6',
+        placeholder: 'Passport Information',
+      },
+      {
+        type: FieldType.Date,
+        desktopColumns: '6',
+        tabletColumns: '6',
+        phoneColumns: '12',
+        outlined: false,
+        name: 'birth_date',
+        title: 'Birth Date',
+      },
+      {
+        type: FieldType.Combo,
+        desktopColumns: '6',
+        tabletColumns: '6',
+        phoneColumns: '12',
+        outlined: false,
+        name: 'country',
+        title: 'Country',
+        defaultValue: 'USA',
+        itemList: ['USA', 'Turkey', 'China'],
+      },
+    ],
+  },
+];
+```
+
+Prompt this schema to an LLM asking for a "shipping address form" or "medical intake form" and the model will produce a structurally identical schema with domain-appropriate field names and labels.
+
+## Using a local LLM with the documentation
+
+If you need the model to answer questions about specific hooks, interfaces, or internal behaviour, clone the repository and index the `docs/` directory as a vector knowledge base in GPT4All (Nomic LocalDocs):
+
+```bash
+git clone https://github.com/react-declarative/react-declarative.git
+```
+
+Point the LocalDocs collection at the `docs/` folder, then write prompts like:
+
+```text
+write a sample sign in form by using IField interface
+```
+
+The embedded documentation includes all JSDoc comments for every field type, hook, and component, which improves accuracy on detailed implementation questions.
+
+<Tip>
+  For one-off generation tasks you do not need a local model. ChatGPT, Claude, and Perplexity already know the `TypedField` interface from their training data and will produce valid schemas from a sample alone.
+</Tip>
+
+## LLMs known to work well with react-declarative
+
+- [ChatGPT](https://chatgpt.com/)
+- [Claude](https://claude.ai/)
+- [Perplexity](https://www.perplexity.ai/)
+- [Bing Copilot](https://www.bing.com/chat)
+- [Google Gemini](https://gemini.google.com/)

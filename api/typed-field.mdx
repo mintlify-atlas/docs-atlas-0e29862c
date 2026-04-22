@@ -1,0 +1,447 @@
+---
+title: 'TypedField Type Reference — react-declarative'
+description: 'Complete reference for the TypedField generic type and IField interface: common props, layout props, validation, callbacks, and per-field type narrowing.'
+keywords: ['TypedField', 'IField', 'field schema', 'react-declarative', 'TypeScript']
+---
+
+`TypedField<Data, Payload>` is the TypeScript discriminated union that describes a single field or layout node in a `<One />` form schema. It is built on top of `IField<Data, Payload>` — the base interface that all field types share — and automatically narrows to the correct prop interface based on the `type` property you set. This page covers all common props available on `IField`, plus the typing mechanics of `TypedField`.
+
+## Import
+
+```typescript
+import type { TypedField, IField } from 'react-declarative';
+import { FieldType } from 'react-declarative';
+```
+
+## How TypedField works
+
+`TypedField` is a union of every per-type factory type, each of which is assembled from `IField` plus the specific props for that `FieldType`:
+
+```typescript
+// Simplified illustration
+type TypedField<Data, Payload> =
+  | { type: FieldType.Text;      name?: string; inputType?: string; ... }
+  | { type: FieldType.Combo;     name?: string; itemList?: ...; ... }
+  | { type: FieldType.Group;     fields?: TypedField[]; ... }
+  // ... one member per FieldType value
+  & { name?: string; fields?: TypedField<Data, Payload>[]; child?: TypedField<Data, Payload> };
+```
+
+TypeScript uses the `type` discriminant to give you precise IntelliSense — once you set `type: FieldType.Slider`, only props relevant to a slider appear in autocompletion.
+
+<Tip>
+  Always use `TypedField<YourData>` when building field arrays. Use `IField`
+  only when you need a type that is independent of a specific `Data` shape.
+</Tip>
+
+## Defining a typed schema
+
+```tsx
+import { OneTyped, TypedField, FieldType } from 'react-declarative';
+
+interface ProductData {
+  name: string;
+  price: number;
+  category: string;
+  inStock: boolean;
+  description: string;
+}
+
+const fields: TypedField<ProductData>[] = [
+  {
+    type: FieldType.Group,
+    fields: [
+      {
+        type: FieldType.Text,
+        name: 'name',
+        title: 'Product name',
+        columns: '6',
+        isInvalid: (data) => (!data.name ? 'Name is required' : null),
+      },
+      {
+        type: FieldType.Text,
+        name: 'price',
+        title: 'Price',
+        inputType: 'number',
+        columns: '6',
+      },
+    ],
+  },
+  {
+    type: FieldType.Combo,
+    name: 'category',
+    title: 'Category',
+    itemList: ['Electronics', 'Clothing', 'Books'],
+  },
+  {
+    type: FieldType.Switch,
+    name: 'inStock',
+    title: 'In stock',
+  },
+  {
+    type: FieldType.Text,
+    name: 'description',
+    title: 'Description',
+    inputRows: 4,
+  },
+];
+
+export default function ProductForm({ id }: { id: string }) {
+  return (
+    <OneTyped<ProductData>
+      fields={fields}
+      handler={() => fetchProduct(id)}
+      onChange={(data) => saveProduct(id, data)}
+    />
+  );
+}
+```
+
+## Common props
+
+These props are available on every `IField` regardless of `type`.
+
+### Identity & data binding
+
+<ParamField path="type" type="FieldType" required>
+  Discriminant that selects which field component renders and which additional
+  props are available. See the [FieldType reference](/api/field-types) for all
+  values.
+</ParamField>
+
+<ParamField path="name" type="string">
+  Key in the `Data` object this field reads from and writes to. Not required for
+  pure layout types (`Group`, `Paper`, `Outline`, etc.) or display-only fields.
+</ParamField>
+
+<ParamField path="defaultValue" type="Value | ((payload: Payload) => Value)">
+  Value written to the data object when the field's current value is `null` or
+  `undefined` on initialisation. `Value` is `string | string[] | number | boolean | null`.
+</ParamField>
+
+<ParamField path="compute" type="(data: Data, payload: Payload) => Promise<Value> | Value">
+  Derives the field value dynamically from the data object. When set, the field
+  becomes read-only. The return value is stored back in `data[name]` before
+  `onChange` fires.
+</ParamField>
+
+<ParamField path="map" type="(data: Data, payload: Payload) => Data">
+  Called after a valid change is applied to the data object. Use it to
+  propagate a field change to other fields (two-way binding).
+</ParamField>
+
+### Labels & display
+
+<ParamField path="title" type="string">
+  Field label. For layout containers this is often used as a section heading.
+</ParamField>
+
+<ParamField path="description" type="string">
+  Helper text displayed below the field input.
+</ParamField>
+
+<ParamField path="placeholder" type="string">
+  Placeholder text shown inside the input when it is empty. Applies to
+  `Text`, `Combo`, `Items`, and `Complete`.
+</ParamField>
+
+### Layout columns
+
+<ParamField path="columns" type="string">
+  Number of columns (out of 12) this field occupies in the grid. Setting this
+  prop applies the value to all breakpoints; breakpoint-specific props override
+  it.
+</ParamField>
+
+<ParamField path="phoneColumns" type="string">
+  Column span on phone-sized viewports.
+</ParamField>
+
+<ParamField path="tabletColumns" type="string">
+  Column span on tablet-sized viewports.
+</ParamField>
+
+<ParamField path="desktopColumns" type="string">
+  Column span on desktop-sized viewports.
+</ParamField>
+
+<ParamField path="columnsOverride" type="string">
+  Overrides the parent grid's total column count for this field's row. Useful
+  when you need a non-12-column grid inside a specific section.
+</ParamField>
+
+### Visibility & state callbacks
+
+<ParamField path="isVisible" type="(data: Data, payload: Payload) => boolean">
+  Return `false` to remove this field from the rendered output. The field is
+  completely unmounted, not just hidden with CSS.
+</ParamField>
+
+<ParamField path="isDisabled" type="(data: Data, payload: Payload) => boolean">
+  Return `true` to disable all interaction with the field.
+</ParamField>
+
+<ParamField path="isReadonly" type="(data: Data, payload: Payload) => boolean">
+  Return `true` to make the field read-only while keeping it visually active.
+</ParamField>
+
+<ParamField path="hidden" type="boolean | ((payload: Payload) => boolean)">
+  Static or payload-derived flag that excludes the field from the render tree.
+  Unlike `isVisible`, this does not receive the full `data` object.
+</ParamField>
+
+<ParamField path="phoneHidden" type="boolean | ((payload: Payload) => boolean)">
+  Hides this field on phone-sized viewports.
+</ParamField>
+
+<ParamField path="tabletHidden" type="boolean | ((payload: Payload) => boolean)">
+  Hides this field on tablet-sized viewports.
+</ParamField>
+
+<ParamField path="desktopHidden" type="boolean | ((payload: Payload) => boolean)">
+  Hides this field on desktop-sized viewports.
+</ParamField>
+
+<ParamField path="features" type="string[]">
+  List of feature flag names that must all be present in the `<One />` `features`
+  prop for this field to render. Use this for role-based or plan-based field
+  visibility.
+</ParamField>
+
+### Validation
+
+<ParamField path="isInvalid" type="(data: Data, payload: Payload) => string | null">
+  Validation callback. Return a non-null string to mark the field as invalid
+  with that message; return `null` when the value is valid. Invalid fields
+  block form submission patterns that check `invalidity`.
+</ParamField>
+
+<ParamField path="isIncorrect" type="(data: Data, payload: Payload) => string | null">
+  Non-blocking validation (spell-check style). Shows a warning in the UI but
+  does not block the save action.
+</ParamField>
+
+<ParamField path="validation" type="IValidation">
+  Declarative validation rule object. Acts as a shorthand factory for common
+  `isInvalid` patterns (required, minLength, maxLength, pattern, etc.).
+</ParamField>
+
+<ParamField path="invalidity" type="(name: string, message: string, payload: Payload) => void">
+  Per-field invalidity callback. Called instead of (or in addition to) the
+  global `onInvalid` prop on `<One />`.
+</ParamField>
+
+<ParamField path="dirty" type="boolean" default="false">
+  Shows validation errors immediately, without waiting for the field to receive
+  and lose focus.
+</ParamField>
+
+### Event callbacks
+
+<ParamField path="focus" type="(name: string, data: Data, payload: Payload, onValueChange: (value: Value) => void, onChange: (data: Data) => void) => void">
+  Called when this specific field receives focus. `onValueChange` updates only
+  this field's value; `onChange` replaces the entire data object.
+</ParamField>
+
+<ParamField path="blur" type="(name: string, data: Data, payload: Payload, onValueChange: (value: Value) => void, onChange: (data: Data) => void) => void">
+  Called when this field loses focus. Same signature as `focus`.
+</ParamField>
+
+<ParamField path="click" type="(name: string, e: React.MouseEvent, data: Data, payload: Payload, onValueChange: (value: Value) => void, onChange: (data: Data) => void) => void | Promise<void>">
+  Intercepts mouse clicks on this field. Useful in read-only card views where
+  clicking should copy the value or open a detail panel.
+</ParamField>
+
+<ParamField path="menu" type="(name: string, action: string, data: Data, payload: Payload, onValueChange: (value: Value) => void, onChange: (data: Data) => void) => void">
+  Called when an item from this field's `menuItems` context menu is selected.
+  `action` is the action string set on the `IFieldMenu` entry.
+</ParamField>
+
+<ParamField path="menuItems" type="IFieldMenu[]">
+  Context menu items shown on right-click or long-press of this field.
+</ParamField>
+
+### Appearance
+
+<ParamField path="sx" type="SxProps">
+  MUI system `sx` prop applied to the field's root element. Supports theme
+  tokens, breakpoints, and pseudo-selectors.
+</ParamField>
+
+<ParamField path="className" type="string">
+  CSS class name applied to the field's root element.
+</ParamField>
+
+<ParamField path="style" type="React.CSSProperties">
+  Inline styles applied to the field's root element.
+</ParamField>
+
+<ParamField path="readonly" type="boolean" default="false">
+  Static read-only flag. Use `isReadonly` for data-driven behaviour.
+</ParamField>
+
+<ParamField path="outlined" type="boolean" default="false">
+  Applies MUI outlined styling to the field.
+</ParamField>
+
+<ParamField path="disabled" type="boolean" default="false">
+  Statically disables the field. Use `isDisabled` for data-driven behaviour.
+</ParamField>
+
+<ParamField path="autoFocus" type="boolean" default="false">
+  Focuses this field automatically when the form mounts.
+</ParamField>
+
+<ParamField path="baseline" type="boolean">
+  Forces bottom-baseline alignment for this field within its row.
+</ParamField>
+
+<ParamField path="noBaseline" type="boolean">
+  Disables bottom-baseline alignment for this field.
+</ParamField>
+
+<ParamField path="labelShrink" type="boolean" default="false">
+  Keeps the floating label in the shrunk position even when the input is empty.
+</ParamField>
+
+<ParamField path="fieldRightMargin" type="string">
+  Overrides the right margin between fields in a row.
+</ParamField>
+
+<ParamField path="fieldBottomMargin" type="string">
+  Overrides the bottom margin between field rows.
+</ParamField>
+
+### Nested fields
+
+<ParamField path="fields" type="TypedField<Data, Payload>[]">
+  Child fields rendered inside a layout container (`Group`, `Paper`, `Outline`,
+  `Expansion`, `Tabs`, `Fragment`, `Div`, `Box`, `Center`, `Stretch`,
+  `Condition`, `Hero`, `Layout`).
+</ParamField>
+
+<ParamField path="child" type="TypedField<Data, Payload>">
+  Single child field. An alternative to `fields` when only one child is needed.
+</ParamField>
+
+### Refs
+
+<ParamField path="groupRef" type="(element?: HTMLDivElement | null) => void">
+  Callback ref for the layout container's root `<div>` element.
+</ParamField>
+
+<ParamField path="inputRef" type="(element?: HTMLInputElement | null) => void">
+  Callback ref for the underlying `<input>` element inside text-based fields.
+</ParamField>
+
+### Debugging
+
+<ParamField path="testId" type="string">
+  Value written to the `data-testid` attribute of the field's root element.
+  Use this to target fields in automated tests.
+</ParamField>
+
+<ParamField path="debug" type="(params: IDebug<Data, Payload>) => void">
+  Development callback invoked on every render with the current field state.
+  Remove before shipping to production.
+</ParamField>
+
+<ParamField path="shouldRecompute" type="(prevData: Data, nextData: Data, payload: Payload) => boolean">
+  Memoisation gate for the `compute` callback. Return `true` to allow
+  recomputation; return `false` to keep the last computed value.
+</ParamField>
+
+<ParamField path="shouldUpdateTr" type="(prevArgs: [string, Data], currentArgs: [string, Data], payload: Payload) => boolean">
+  Memoisation gate for the `tr` translation callback on `Combo` and `Items`
+  fields.
+</ParamField>
+
+<ParamField path="shouldUpdateItemList" type="(prevData: Data, currentData: Data, payload: Payload) => boolean">
+  Memoisation gate for the `itemList` factory on `Combo` and `Items` fields.
+</ParamField>
+
+## TypedFieldRegistry
+
+`TypedFieldRegistry<Data, Payload, Target>` is the conditional type that maps a target object shape to the correct narrowed `TypedField` variant. You rarely need to reference it directly — it is what powers the discriminated union behaviour of `TypedField` itself.
+
+```typescript
+// The registry resolves to the correct per-type interface:
+type MySlider = TypedFieldRegistry<MyData, MyPayload, { type: FieldType.Slider }>;
+// → TypedField with minSlider, maxSlider, stepSlider, etc.
+```
+
+## Complete example
+
+```tsx
+import { OneTyped, TypedField, FieldType } from 'react-declarative';
+
+interface OrderData {
+  productId: string;
+  quantity: number;
+  discount: number;
+  notes: string;
+  urgent: boolean;
+}
+
+const fields: TypedField<OrderData>[] = [
+  {
+    type: FieldType.Paper,
+    title: 'Order details',
+    fields: [
+      {
+        type: FieldType.Choose,
+        name: 'productId',
+        title: 'Product',
+        columns: '8',
+        choose: async (data, payload) => openProductPicker(payload.warehouseId),
+        isInvalid: (data) => (data.productId ? null : 'Select a product'),
+      },
+      {
+        type: FieldType.Text,
+        name: 'quantity',
+        title: 'Quantity',
+        inputType: 'number',
+        columns: '4',
+        defaultValue: 1,
+        isInvalid: (data) =>
+          data.quantity < 1 ? 'Must be at least 1' : null,
+      },
+      {
+        type: FieldType.Slider,
+        name: 'discount',
+        title: 'Discount %',
+        minSlider: 0,
+        maxSlider: 100,
+        stepSlider: 5,
+        labelFormatSlider: (v) => `${v}%`,
+        isVisible: (data) => data.quantity > 10,
+      },
+    ],
+  },
+  {
+    type: FieldType.Text,
+    name: 'notes',
+    title: 'Notes',
+    inputRows: 3,
+    placeholder: 'Special instructions…',
+  },
+  {
+    type: FieldType.Switch,
+    name: 'urgent',
+    title: 'Standard delivery',
+    switchActiveLabel: 'Urgent delivery',
+  },
+];
+
+export default function OrderForm({ orderId }: { orderId: string }) {
+  return (
+    <OneTyped<OrderData>
+      fields={fields}
+      payload={{ warehouseId: 'WH-1' }}
+      handler={() => fetchOrder(orderId)}
+      onChange={(data) => saveOrder(orderId, data)}
+      onInvalid={(name, msg) => console.warn(`${name}: ${msg}`)}
+    />
+  );
+}
+```

@@ -1,0 +1,911 @@
+---
+title: 'FieldType Enum — All Field Types in react-declarative'
+description: 'Complete reference for every FieldType enum value: string key, use case, and the unique IField props that apply to each field or layout type.'
+keywords: ['FieldType', 'field types', 'IField', 'react-declarative', 'form fields']
+---
+
+Every field and layout container inside a `<One />` form is identified by a `FieldType` enum value on its `type` property. This page documents every available value, its internal string key, its purpose, and the props from `IField` that are specific to that type. Props shared by all types (such as `name`, `title`, `columns`, `isVisible`, `sx`) are documented in the [TypedField reference](/api/typed-field).
+
+## Import
+
+```typescript
+import { FieldType } from 'react-declarative';
+```
+
+<Note>
+  Internally each enum value is stored as a `Symbol.for(stringKey)`, which
+  means comparisons must use the `FieldType.*` enum member — never the raw
+  string.
+</Note>
+
+---
+
+## Text inputs
+
+<AccordionGroup>
+
+<Accordion title="FieldType.Text — 'text-field'">
+
+Single-line or multi-line text input backed by MUI `TextField`.
+
+**Unique props**
+
+<ParamField path="inputType" type="'text' | 'color' | 'date' | 'email' | 'month' | 'number' | 'password' | 'search' | 'tel' | 'time' | 'url' | 'week'">
+  HTML `type` attribute for the underlying `<input>`. Defaults to `'text'`.
+</ParamField>
+
+<ParamField path="inputMode" type="'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search'">
+  HTML `inputmode` attribute. Use `'decimal'` with `inputPattern: '[0-9.,]+'`
+  to add a comma to the iOS numeric keyboard.
+</ParamField>
+
+<ParamField path="inputPattern" type="string">
+  HTML `pattern` attribute for client-side format validation.
+</ParamField>
+
+<ParamField path="inputRows" type="number">
+  When greater than `1`, renders a `<textarea>` with the given number of
+  visible rows.
+</ParamField>
+
+<ParamField path="inputFormatter" type="(input: string) => string">
+  Transforms the raw user input on every keystroke. Applied before the value
+  reaches the data object.
+</ParamField>
+
+<ParamField path="inputFormatterTemplate" type="string">
+  Mask template for the formatter (e.g. `'00/00/0000'` for dates). The
+  `inputFormatterSymbol` character (default `'0'`) marks variable positions.
+</ParamField>
+
+<ParamField path="inputFormatterSymbol" type="string" default="'0'">
+  The placeholder character within `inputFormatterTemplate`.
+</ParamField>
+
+<ParamField path="inputFormatterAllowed" type="RegExp | ((char: string, idx: number) => boolean)">
+  Restricts which characters are accepted during formatting.
+</ParamField>
+
+<ParamField path="inputFormatterReplace" type="(char: string) => string | null">
+  Substitutes one character for another during formatting, e.g. replacing a
+  comma with a decimal point.
+</ParamField>
+
+<ParamField path="inputAutocomplete" type="'new-password' | 'on' | 'off' | 'false'">
+  Sets the HTML `autocomplete` attribute on the input.
+</ParamField>
+
+<ParamField path="leadingIcon" type="React.ComponentType">
+  MUI icon component rendered inside the field on the left.
+</ParamField>
+
+<ParamField path="trailingIcon" type="React.ComponentType">
+  MUI icon component rendered inside the field on the right.
+</ParamField>
+
+<ParamField path="leadingIconClick" type="(value, data, payload, onValueChange, onChange) => void">
+  Click handler for the leading icon. Use to open a picker modal.
+</ParamField>
+
+<ParamField path="trailingIconClick" type="(value, data, payload, onValueChange, onChange) => void">
+  Click handler for the trailing icon.
+</ParamField>
+
+<ParamField path="leadingIconRipple" type="boolean" default="false">
+  Shows a ripple effect on the leading icon when clicked.
+</ParamField>
+
+<ParamField path="trailingIconRipple" type="boolean" default="false">
+  Shows a ripple effect on the trailing icon when clicked.
+</ParamField>
+
+<ParamField path="labelShrink" type="boolean" default="false">
+  Forces the floating label to remain in the shrunk position even when the
+  field is empty.
+</ParamField>
+
+```tsx
+{ type: FieldType.Text, name: 'phone', title: 'Phone',
+  inputType: 'tel', inputMode: 'tel',
+  inputFormatterTemplate: '+0 (000) 000-0000',
+  inputFormatterAllowed: /[0-9]/ }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Date — 'date-field'">
+
+Date picker input using MUI date components.
+
+**Unique props**
+
+<ParamField path="leadingIcon" type="React.ComponentType">
+  Icon rendered on the left side of the date input.
+</ParamField>
+
+<ParamField path="trailingIcon" type="React.ComponentType">
+  Icon rendered on the right side of the date input.
+</ParamField>
+
+```tsx
+{ type: FieldType.Date, name: 'dob', title: 'Date of birth' }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Time — 'time-field'">
+
+Time picker input.
+
+**Unique props**
+
+<ParamField path="leadingIcon" type="React.ComponentType">
+  Icon rendered on the left side of the time input.
+</ParamField>
+
+<ParamField path="trailingIcon" type="React.ComponentType">
+  Icon rendered on the right side of the time input.
+</ParamField>
+
+```tsx
+{ type: FieldType.Time, name: 'startTime', title: 'Start time' }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Complete — 'complete-field'">
+
+Text input with autocomplete suggestions. Suggestions can be a static array or
+an async function.
+
+**Unique props**
+
+<ParamField path="tip" type="string[] | ((value: string, data: Data, payload: Payload) => string[] | Promise<string[]>)">
+  Autocomplete suggestion list. Receives the current field value, data object,
+  and payload when a function.
+</ParamField>
+
+<ParamField path="tipSelect" type="(value: string, data: Data, payload: Payload, onChange: (data: Data) => void) => void">
+  Called when the user selects a suggestion. Use it to update multiple fields
+  from one selection.
+</ParamField>
+
+<ParamField path="keepRaw" type="boolean" default="false">
+  Disables the built-in full-text filter so all suggestions are always shown
+  regardless of the current input value.
+</ParamField>
+
+```tsx
+{ type: FieldType.Complete, name: 'city', title: 'City',
+  tip: async (value) => fetchCities(value) }
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Selectors
+
+<AccordionGroup>
+
+<Accordion title="FieldType.Combo — 'combo-field'">
+
+Single-value dropdown with optional free-solo input. Backed by MUI Autocomplete.
+
+**Unique props**
+
+<ParamField path="itemList" type="string[] | ((data: Data, payload: Payload) => string[]) | ((data: Data, payload: Payload) => Promise<string[]>)">
+  List of option strings. Accepts a static array or an async factory.
+</ParamField>
+
+<ParamField path="tr" type="((s: string, data: Data, payload: Payload) => string) | ((s: string, data: Data, payload: Payload) => Promise<string>)">
+  Translation function that converts raw option keys to human-readable labels.
+</ParamField>
+
+<ParamField path="freeSolo" type="boolean" default="false">
+  Allows the user to type a value not present in `itemList`.
+</ParamField>
+
+<ParamField path="noDeselect" type="boolean" default="false">
+  Disables the clear/deselect button.
+</ParamField>
+
+<ParamField path="virtualListBox" type="boolean" default="false">
+  Enables virtualised rendering for large option lists.
+</ParamField>
+
+<ParamField path="watchItemList" type="boolean" default="false">
+  Enables change-detection on `itemList` so the option list re-evaluates when
+  the data object changes.
+</ParamField>
+
+<ParamField path="shouldUpdateItemList" type="(prevData, currentData, payload) => boolean">
+  Custom memoisation predicate for `itemList` re-evaluation.
+</ParamField>
+
+```tsx
+{ type: FieldType.Combo, name: 'country', title: 'Country',
+  itemList: ['US', 'GB', 'DE'],
+  tr: (s) => countryNames[s] }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Items — 'items-field'">
+
+Multi-value chip selector. The field value is a `string[]`.
+
+**Unique props** — same as `FieldType.Combo`.
+
+```tsx
+{ type: FieldType.Items, name: 'tags', title: 'Tags',
+  itemList: ['react', 'typescript', 'node'] }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Choose — 'choose-field'">
+
+Picker field that opens a custom modal for selection. Returns a single value
+or an array of values.
+
+**Unique props**
+
+<ParamField path="choose" type="(data: Data, payload: Payload) => Promise<string | string[] | null> | string | string[] | null">
+  Function that opens the selection modal. Should return the selected
+  value(s) or `null` if the user cancels.
+</ParamField>
+
+```tsx
+{ type: FieldType.Choose, name: 'userId', title: 'Assign user',
+  choose: async (data, payload) => openUserPickerModal() }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Tree — 'tree-field'">
+
+Hierarchical tree-node selector rendered in a modal.
+
+**Unique props**
+
+<ParamField path="itemTree" type="ITreeNode[] | ((data: Data, payload: Payload) => ITreeNode[]) | ((data: Data, payload: Payload) => Promise<ITreeNode[]>)">
+  Tree node definitions. Each `ITreeNode` has an `id`, a `label`, and an
+  optional `children` array.
+</ParamField>
+
+<ParamField path="watchItemTree" type="boolean" default="false">
+  Enables change-detection on `itemTree`.
+</ParamField>
+
+```tsx
+{ type: FieldType.Tree, name: 'category', title: 'Category',
+  itemTree: [{ id: '1', label: 'Electronics', children: [...] }] }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Dict — 'dict-field'">
+
+Search-as-you-type lookup field backed by a paginated API. Designed for large
+reference data sets where all options cannot be loaded upfront.
+
+**Unique props**
+
+<ParamField path="dictSearch" type="(dto: { search, limit, offset, initial, rows, data, payload }) => ISearchItem[] | Promise<ISearchItem[]>">
+  Handler that fetches matching records. When the number of returned items is
+  less than `dictLimit`, the component stops making new requests.
+</ParamField>
+
+<ParamField path="dictLimit" type="number">
+  Page size for `dictSearch` requests.
+</ParamField>
+
+<ParamField path="dictDelay" type="number">
+  Debounce delay in milliseconds between `dictSearch` calls.
+</ParamField>
+
+<ParamField path="dictValue" type="(value: string, data: Data, payload: Payload) => ISearchItem | Promise<ISearchItem>">
+  Resolves the display label for a stored value asynchronously.
+</ParamField>
+
+<ParamField path="dictSearchText" type="(data: Data, payload: Payload) => string | Promise<string>">
+  Resolves the initial search text from the current data.
+</ParamField>
+
+<ParamField path="dictOnText" type="(text, data, payload, onValueChange, onChange) => void">
+  Called on every keystroke. Use it to sync a secondary label field.
+</ParamField>
+
+<ParamField path="dictOnItem" type="(value, data, payload, onValueChange, onChange) => void">
+  Called when the user selects an item from the modal.
+</ParamField>
+
+<ParamField path="dictOnAppend" type="(search, data, payload, onValueChange, onChange) => void">
+  Called when the user creates a new record from the search modal.
+</ParamField>
+
+<ParamField path="dictSearchItem" type="React.ComponentType">
+  Custom component for rendering each item in the search result list.
+</ParamField>
+
+<ParamField path="dictCreateButton" type="React.ComponentType">
+  Custom component for the "create new" button in the search modal.
+</ParamField>
+
+```tsx
+{ type: FieldType.Dict, name: 'productId', title: 'Product',
+  dictSearch: async ({ search, limit, offset }) =>
+    fetchProducts({ search, limit, offset }),
+  dictValue: async (id) => fetchProductById(id) }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Radio — 'radio-field'">
+
+Single radio button. Group multiple `FieldType.Radio` fields with the same
+`name` to create a radio group.
+
+**Unique props**
+
+<ParamField path="radioValue" type="string">
+  The value written to the data object when this radio button is selected.
+</ParamField>
+
+```tsx
+[
+  { type: FieldType.Radio, name: 'size', title: 'Small',  radioValue: 'S' },
+  { type: FieldType.Radio, name: 'size', title: 'Medium', radioValue: 'M' },
+  { type: FieldType.Radio, name: 'size', title: 'Large',  radioValue: 'L' },
+]
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Toggles
+
+<AccordionGroup>
+
+<Accordion title="FieldType.Checkbox — 'checkbox-field'">
+
+Boolean checkbox field.
+
+```tsx
+{ type: FieldType.Checkbox, name: 'agreeTerms', title: 'I agree to the terms' }
+```
+
+No unique props beyond the common IField set.
+
+</Accordion>
+
+<Accordion title="FieldType.Switch — 'switch-field'">
+
+Toggle switch (on/off).
+
+**Unique props**
+
+<ParamField path="switchNoColor" type="boolean" default="false">
+  Renders the switch in the default grey colour rather than the primary
+  theme colour.
+</ParamField>
+
+<ParamField path="switchActiveLabel" type="string">
+  Replaces `title` with this label when the switch is on.
+</ParamField>
+
+```tsx
+{ type: FieldType.Switch, name: 'notifications', title: 'Notifications off',
+  switchActiveLabel: 'Notifications on' }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.YesNo — 'yesno-field'">
+
+Yes/No selector rendered as two radio-style buttons.
+
+```tsx
+{ type: FieldType.YesNo, name: 'hasAddress', title: 'Has billing address?' }
+```
+
+No unique props beyond the common IField set.
+
+</Accordion>
+
+<Accordion title="FieldType.Rating — 'rating-field'">
+
+Star rating input (1–5 by default).
+
+```tsx
+{ type: FieldType.Rating, name: 'score', title: 'Rating' }
+```
+
+No unique props beyond the common IField set.
+
+</Accordion>
+
+<Accordion title="FieldType.Slider — 'slider-field'">
+
+Numeric range slider.
+
+**Unique props**
+
+<ParamField path="minSlider" type="number" default="0">
+  Minimum slider value.
+</ParamField>
+
+<ParamField path="maxSlider" type="number" default="100">
+  Maximum slider value.
+</ParamField>
+
+<ParamField path="stepSlider" type="number" default="1">
+  Step increment.
+</ParamField>
+
+<ParamField path="labelFormatSlider" type="(v: number) => string | number">
+  Formats the tooltip label shown above the thumb.
+</ParamField>
+
+<ParamField path="sliderSteps" type="Array<{ value: number; label: string }>">
+  Discrete step marks with labels rendered below the track.
+</ParamField>
+
+<ParamField path="sliderThumbColor" type="(v: number) => string">
+  Dynamic thumb colour based on current value.
+</ParamField>
+
+<ParamField path="sliderTrackColor" type="(v: number) => string">
+  Dynamic track colour. Must be set together with `sliderThumbColor` and
+  `sliderRailColor` to take effect.
+</ParamField>
+
+<ParamField path="sliderRailColor" type="(v: number) => string">
+  Dynamic rail colour (the unfilled portion of the track).
+</ParamField>
+
+```tsx
+{ type: FieldType.Slider, name: 'budget', title: 'Budget',
+  minSlider: 0, maxSlider: 10000, stepSlider: 100,
+  labelFormatSlider: (v) => `$${v.toLocaleString()}` }
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Display
+
+<AccordionGroup>
+
+<Accordion title="FieldType.Typography — 'typography-field'">
+
+Read-only text display using MUI Typography. Use `compute` to derive the
+displayed value from the data object.
+
+**Unique props**
+
+<ParamField path="typoVariant" type="'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'subtitle1' | 'subtitle2' | 'body1' | 'body2' | 'caption'">
+  MUI Typography variant. Defaults to `'body1'`.
+</ParamField>
+
+```tsx
+{ type: FieldType.Typography, typoVariant: 'h5',
+  compute: (data) => `Hello, ${data.name}` }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Progress — 'progress-field'">
+
+Linear progress bar that visualises a numeric percentage value.
+
+**Unique props**
+
+<ParamField path="maxPercent" type="number" default="100">
+  The value that represents 100 %. The minimum is always 0.
+</ParamField>
+
+<ParamField path="showPercentLabel" type="boolean" default="false">
+  Displays the numeric percentage value as text to the left of the bar.
+</ParamField>
+
+<ParamField path="progressColor" type="(v: number) => string">
+  Dynamic background colour of the progress bar container.
+</ParamField>
+
+<ParamField path="progressBarColor" type="(v: number) => string">
+  Dynamic fill colour of the progress indicator.
+</ParamField>
+
+```tsx
+{ type: FieldType.Progress, name: 'completion', title: 'Progress',
+  maxPercent: 100, showPercentLabel: true }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.File — 'file-field'">
+
+File upload field. Stores the resulting URL string in the data object.
+
+**Unique props**
+
+<ParamField path="fileAccept" type="string">
+  MIME type or extension filter for the file picker (e.g. `'image/*'` or
+  `'.pdf,.docx'`).
+</ParamField>
+
+<ParamField path="upload" type="(file: File, data: Data, payload: Payload) => Promise<string> | string">
+  Async function that uploads the file and returns a URL string to be stored
+  in the data object.
+</ParamField>
+
+<ParamField path="view" type="(file: string, data: Data, payload: Payload) => Promise<void> | void">
+  Called when the user clicks to preview the current file value.
+</ParamField>
+
+```tsx
+{ type: FieldType.File, name: 'avatar', title: 'Profile photo',
+  fileAccept: 'image/*',
+  upload: async (file) => uploadToStorage(file) }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Icon — 'icon-field'">
+
+Displays an MUI icon, optionally inside a circular avatar.
+
+**Unique props**
+
+<ParamField path="icon" type="React.ComponentType">
+  The MUI icon component to display.
+</ParamField>
+
+<ParamField path="iconSize" type="number">
+  Pixel size of the icon.
+</ParamField>
+
+<ParamField path="iconColor" type="'inherit' | 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'">
+  MUI palette colour applied to the icon.
+</ParamField>
+
+<ParamField path="iconBackground" type="'inherit' | 'primary' | 'secondary' | 'success' | 'error' | 'info' | 'warning'">
+  Background colour of the circular avatar surrounding the icon.
+</ParamField>
+
+```tsx
+import PersonIcon from '@mui/icons-material/Person';
+{ type: FieldType.Icon, icon: PersonIcon, iconColor: 'primary', iconSize: 32 }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Button — 'button-field'">
+
+Clickable button rendered inside the form layout.
+
+**Unique props**
+
+<ParamField path="icon" type="React.ComponentType">
+  Icon component displayed on the button.
+</ParamField>
+
+<ParamField path="buttonVariant" type="'text' | 'outlined' | 'contained'" default="'contained'">
+  MUI button variant.
+</ParamField>
+
+<ParamField path="buttonSize" type="'small' | 'medium' | 'large'" default="'medium'">
+  MUI button size.
+</ParamField>
+
+<ParamField path="buttonColor" type="'inherit' | 'primary' | 'secondary' | 'success' | 'error' | 'info' | 'warning'">
+  MUI palette colour for the button.
+</ParamField>
+
+```tsx
+{ type: FieldType.Button, title: 'Submit',
+  buttonVariant: 'contained', buttonColor: 'primary',
+  click: (name, e, data, payload, onValueChange, onChange) => handleSubmit(data) }
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Line — 'line-field'">
+
+Horizontal divider line with an optional label.
+
+**Unique props**
+
+<ParamField path="lineTransparent" type="boolean" default="false">
+  Hides the line itself so only the label is visible.
+</ParamField>
+
+```tsx
+{ type: FieldType.Line, title: 'Personal details' }
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Layout
+
+<AccordionGroup>
+
+<Accordion title="FieldType.Group — 'group-layout'">
+
+The fundamental layout container. Children are laid out in a responsive CSS
+grid using the `columns` / `phoneColumns` / `tabletColumns` / `desktopColumns`
+props.
+
+**Unique props**
+
+<ParamField path="fields" type="TypedField[]">
+  Child fields rendered inside this group.
+</ParamField>
+
+```tsx
+{ type: FieldType.Group, fields: [
+  { type: FieldType.Text, name: 'first', title: 'First name', columns: '6' },
+  { type: FieldType.Text, name: 'last',  title: 'Last name',  columns: '6' },
+]}
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Paper — 'paper-layout'">
+
+Layout container wrapped in an MUI `Paper` card.
+
+**Unique props**
+
+<ParamField path="fields" type="TypedField[]">
+  Child fields.
+</ParamField>
+
+<ParamField path="innerPadding" type="string">
+  CSS padding applied to the inner content area.
+</ParamField>
+
+<ParamField path="outlinePaper" type="boolean" default="false">
+  Converts this Paper into an Outline layout (bordered card, no elevation).
+</ParamField>
+
+<ParamField path="transparentPaper" type="boolean" default="false">
+  Removes background and elevation.
+</ParamField>
+
+</Accordion>
+
+<Accordion title="FieldType.Outline — 'outline-layout'">
+
+Layout container with a visible border, similar to MUI `OutlinedInput`.
+
+**Unique props**
+
+<ParamField path="fields" type="TypedField[]">
+  Child fields.
+</ParamField>
+
+<ParamField path="title" type="string">
+  Legend text displayed in the border notch.
+</ParamField>
+
+</Accordion>
+
+<Accordion title="FieldType.Expansion — 'expansion-layout'">
+
+Collapsible accordion layout powered by MUI `Accordion`.
+
+**Unique props**
+
+<ParamField path="fields" type="TypedField[]">
+  Child fields shown when expanded.
+</ParamField>
+
+<ParamField path="expansionOpened" type="boolean" default="false">
+  Renders the panel in the open state by default.
+</ParamField>
+
+</Accordion>
+
+<Accordion title="FieldType.Tabs — 'tabs-layout'">
+
+Tabbed container. Each tab corresponds to one entry in `tabList`, with child
+fields assigned to tabs via their `columns` index.
+
+**Unique props**
+
+<ParamField path="tabList" type="string[]">
+  Array of tab label strings. The number of tabs equals the array length.
+</ParamField>
+
+<ParamField path="tabIndex" type="number" default="0">
+  Index of the initially active tab.
+</ParamField>
+
+<ParamField path="tabVariant" type="'fullWidth' | 'standard' | 'scrollable'" default="'standard'">
+  MUI Tabs `variant` prop.
+</ParamField>
+
+<ParamField path="tabColor" type="'primary' | 'secondary'" default="'primary'">
+  MUI Tabs `textColor` prop.
+</ParamField>
+
+<ParamField path="tabChange" type="(idx: number) => void">
+  Called when the user switches tabs.
+</ParamField>
+
+<ParamField path="tabLine" type="boolean" default="false">
+  Adds a separator line below the tab bar.
+</ParamField>
+
+<ParamField path="tabBackground" type="boolean" default="false">
+  Fills the tab bar background with a dark colour.
+</ParamField>
+
+<ParamField path="tabKeepFlow" type="boolean" default="false">
+  Allows tab panel content to expand the container height.
+</ParamField>
+
+<ParamField path="fields" type="TypedField[]">
+  Child fields. Assign each field to a tab by setting its `columns` to the
+  tab's index string.
+</ParamField>
+
+</Accordion>
+
+<Accordion title="FieldType.Hero — 'hero-layout'">
+
+Absolute-positioned layout container for building custom spacing and
+responsive positioning. Each positional prop (`top`, `left`, `width`,
+`height`, etc.) accepts a CSS string or a `(size) => string` callback for
+responsive values.
+
+**Key props** — all sizing props (`top`, `left`, `right`, `bottom`,
+`width`, `height`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight`) are
+available with `phone`, `tablet`, and `desktop` breakpoint variants.
+
+<ParamField path="heroOuterStyle" type="React.CSSProperties">
+  Inline styles for the outer Hero wrapper.
+</ParamField>
+
+<ParamField path="heroInnerStyle" type="React.CSSProperties">
+  Inline styles for the inner content wrapper.
+</ParamField>
+
+</Accordion>
+
+<Accordion title="FieldType.Fragment — 'fragment-layout'">
+
+Transparent wrapper that groups fields without adding any DOM element or
+styling. Useful for conditional rendering of multiple fields together.
+
+</Accordion>
+
+<Accordion title="FieldType.Div — 'div-layout'">
+
+Plain `<div>` wrapper. Accepts `className`, `style`, and `sx`.
+
+</Accordion>
+
+<Accordion title="FieldType.Box — 'box-layout'">
+
+MUI `<Box>` wrapper. Accepts `sx` and all MUI system props.
+
+</Accordion>
+
+<Accordion title="FieldType.Center — 'center-layout'">
+
+Flexbox layout that centres its children both horizontally and vertically.
+
+</Accordion>
+
+<Accordion title="FieldType.Stretch — 'stretch-layout'">
+
+Flex layout that stretches children to fill the available height.
+
+</Accordion>
+
+<Accordion title="FieldType.Condition — 'condition-layout'">
+
+Conditionally renders its children based on a predicate evaluated against the
+current data object.
+
+**Unique props**
+
+<ParamField path="condition" type="((data: Data, payload: Payload) => boolean) | ((data: Data, payload: Payload) => Promise<boolean>)">
+  Predicate that determines whether child fields are rendered.
+</ParamField>
+
+<ParamField path="shouldCondition" type="(prevData, nextData, payload) => boolean">
+  Memoisation predicate: return `true` to re-evaluate `condition`.
+</ParamField>
+
+<ParamField path="conditionLoading" type="React.ComponentType<{ data, payload }>">
+  Component rendered while an async `condition` promise is pending.
+</ParamField>
+
+<ParamField path="conditionElse" type="React.ComponentType<{ data, payload }>">
+  Component rendered when `condition` returns `false`.
+</ParamField>
+
+</Accordion>
+
+<Accordion title="FieldType.Layout — 'custom-layout'">
+
+Fully custom layout. You supply the render function via `customLayout`.
+
+**Unique props**
+
+<ParamField path="customLayout" type="(props: React.PropsWithChildren<Data & { onChange, _fieldData, _fieldParams, _payload }>) => React.ReactElement">
+  Your custom layout render function. Receives `children` plus the current
+  `data` object spread as props, an `onChange` helper, the raw `_fieldParams`,
+  and `_payload`.
+</ParamField>
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Special
+
+<AccordionGroup>
+
+<Accordion title="FieldType.Component — 'component-field'">
+
+Injects an arbitrary React component into the field slot with full access to
+the current data, payload, and imperative change callbacks.
+
+**Unique props**
+
+<ParamField path="element" type="React.ComponentType<ComponentFieldInstance<Data, Payload>>">
+  The component to render. It receives `data`, `payload`, `onChange`, and
+  `onValueChange` as props.
+</ParamField>
+
+<ParamField path="watchOneContext" type="boolean" default="false">
+  Subscribes the component to `context` changes so it re-renders when context
+  updates.
+</ParamField>
+
+</Accordion>
+
+<Accordion title="FieldType.Init — 'init-field'">
+
+Invisible field whose sole purpose is to run a side-effect when the form
+initialises. It does not render any DOM element.
+
+```tsx
+{ type: FieldType.Init, name: 'init',
+  compute: async (data, payload) => {
+    await prefetchRelatedData(payload.userId);
+    return null;
+  }}
+```
+
+</Accordion>
+
+<Accordion title="FieldType.Phony — 'phony-field'">
+
+A no-op field that renders nothing and produces no output. Used as a stable
+placeholder when a field must be present in the schema for type-narrowing
+purposes but should not appear in the UI.
+
+</Accordion>
+
+</AccordionGroup>

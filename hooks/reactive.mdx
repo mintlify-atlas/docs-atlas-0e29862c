@@ -1,0 +1,437 @@
+---
+title: "Reactive Primitives: Subjects, Observers & Source Pipelines"
+description: "A complete guide to react-declarative's Subject, BehaviorSubject, EventEmitter, Observer, Source, and the React hooks that connect them to component state."
+---
+
+react-declarative implements a lightweight Rx-style reactive layer that does not depend on RxJS. The core primitives — `Subject`, `BehaviorSubject`, `EventEmitter`, and `Observer` — follow the [Observer pattern](https://en.wikipedia.org/wiki/Observer_pattern), while `Source` adds a MapReduce-style pipeline on top. A family of React hooks (`useSubject`, `useBehaviorSubject`, `useSubscription`, `useSubjectValue`, `useChangeSubject`, `useChange`) bridges the reactive layer to component state. This page documents all of them.
+
+## Core classes
+
+```typescript
+import {
+  Subject,
+  BehaviorSubject,
+  EventEmitter,
+  Observer,
+  Operator,
+  Source,
+} from 'react-declarative';
+
+import type { TSubject, TObserver, TObservable, TBehaviorSubject } from 'react-declarative';
+```
+
+---
+
+<Accordion title="Subject">
+
+`Subject` is a multicast event bus: call `next(data)` to push a value to all current subscribers. It implements both `TSubject<Data>` (producer side) and `TObservable<Data>` (consumer side).
+
+```typescript
+class Subject<Data = any> {
+  // Push a value to all subscribers
+  next(data: Data): Promise<void>;
+
+  // Subscribe — returns an unsubscribe function
+  subscribe(callback: (data: Data) => void): () => void;
+
+  // One-shot subscription
+  once(callback: (data: Data) => void): () => void;
+
+  // Unsubscribe all listeners
+  unsubscribeAll(): void;
+
+  // Operator chain — returns TObserver<T>
+  map<T>(fn: (v: Data) => T): TObserver<T>;
+  flatMap<T>(fn: (v: Data) => T[]): TObserver<T>;
+  filter(fn: (v: Data) => boolean): TObserver<Data>;
+  reduce<T>(fn: (acm: T, cur: Data) => T, begin: T): TObserver<T>;
+  tap(fn: (v: Data) => void): TObserver<Data>;
+  mapAsync<T>(fn: (v: Data) => Promise<T>, fallback?: (e: Error) => void): TObserver<T>;
+  debounce(delay?: number): TObserver<Data>;
+  delay(delay?: number): TObserver<Data>;
+  merge<T>(observer: TObserver<T>): TObserver<Data | T>;
+  operator<T>(fn: (o: TObserver<Data>) => TObserver<T>): TObserver<T>;
+
+  // Conversion helpers
+  toObserver(): TObserver<Data>;
+  toPromise(): Promise<Data>;
+}
+```
+
+```tsx
+import { Subject } from 'react-declarative';
+
+// Create a shared subject (e.g., in a service)
+export const clickSubject = new Subject<MouseEvent>();
+
+// Producer
+button.addEventListener('click', (e) => clickSubject.next(e));
+
+// Consumer — clean up by calling the returned function
+const unsubscribe = clickSubject.subscribe((e) => {
+  console.log('clicked at', e.clientX, e.clientY);
+});
+```
+
+</Accordion>
+
+<Accordion title="BehaviorSubject">
+
+`BehaviorSubject` extends `Subject` with a current `data` property. New subscribers immediately receive the latest value via `toObserver()`.
+
+```typescript
+class BehaviorSubject<Data = any> extends Subject<Data> {
+  constructor(initialData?: Data | null);
+
+  // Holds the last emitted value
+  readonly data: Data | null;
+
+  // Override: stores data before broadcasting
+  next(data: Data): Promise<void>;
+
+  // Replays current value to new subscriber
+  toObserver(): TObserver<Data>;
+}
+```
+
+```tsx
+import { BehaviorSubject } from 'react-declarative';
+
+const isLoading$ = new BehaviorSubject<boolean>(false);
+
+// Toggle loading
+isLoading$.next(true);
+
+// New subscriber gets `true` immediately
+const unsub = isLoading$.subscribe((loading) => {
+  document.title = loading ? 'Loading…' : 'App';
+});
+
+console.log(isLoading$.data); // true
+```
+
+</Accordion>
+
+<Accordion title="EventEmitter">
+
+`EventEmitter` is the low-level named-event bus that `Subject` builds upon. Use it directly when you need multiple distinct event channels on a single emitter.
+
+```typescript
+class EventEmitter {
+  subscribe(event: symbol | string, callback: Function): void;
+  unsubscribe(event: symbol | string, callback: Function): void;
+  unsubscribeAll(): void;
+  once(event: symbol | string, callback: Function): () => void;
+  emit(event: symbol | string, ...args: any[]): Promise<void>;
+}
+```
+
+```tsx
+import { EventEmitter } from 'react-declarative';
+
+const RESIZE = Symbol('resize');
+const SCROLL = Symbol('scroll');
+
+const emitter = new EventEmitter();
+
+emitter.subscribe(RESIZE, ({ width, height }) => console.log(width, height));
+emitter.subscribe(SCROLL, (y) => console.log('scroll', y));
+
+await emitter.emit(RESIZE, { width: 1920, height: 1080 });
+```
+
+</Accordion>
+
+<Accordion title="Observer">
+
+`Observer` is the chainable pipeline node returned by all `Subject` operator methods. It is lazy — the pipeline is not executed until `subscribe` is called.
+
+```typescript
+class Observer<Data> {
+  // Chaining operators (same set as Subject)
+  map<T>(fn: (v: Data) => T): TObserver<T>;
+  filter(fn: (v: Data) => boolean): TObserver<Data>;
+  reduce<T>(fn: (acm: T, cur: Data) => T, begin: T): TObserver<T>;
+  tap(fn: (v: Data) => void): TObserver<Data>;
+  flatMap<T>(fn: (v: Data) => T[]): TObserver<T>;
+  mapAsync<T>(fn: (v: Data) => Promise<T>): TObserver<T>;
+  debounce(delay?: number): TObserver<Data>;
+  delay(delay?: number): TObserver<Data>;
+  merge<T>(other: TObserver<T>): TObserver<Data | T>;
+  split(): Observer<ReadonlyArray<FlatArray<Data[], 20>>>;
+  repeat(interval?: number): TObserver<Data>;
+
+  // Terminate
+  subscribe(callback: (data: Data) => void): () => void;
+  toPromise(): Promise<Data>;
+  toIteratorContext(): AsyncIterableIterator<Data>;
+}
+```
+
+```tsx
+// Build a chain from a Subject
+import { Subject } from 'react-declarative';
+
+const numbers$ = new Subject<number>();
+
+const unsub = numbers$
+  .filter((n) => n % 2 === 0)
+  .map((n) => n * 10)
+  .tap((n) => console.log('tapped', n))
+  .subscribe((n) => console.log('result', n));
+
+numbers$.next(1);   // filtered out
+numbers$.next(2);   // tapped 20 → result 20
+numbers$.next(4);   // tapped 40 → result 40
+```
+
+</Accordion>
+
+<Accordion title="Source — MapReduce pipelines">
+
+`Source` implements a [Lambda Architecture](https://en.wikipedia.org/wiki/Lambda_architecture) pipeline. It provides static factory methods (`fromInterval`, `join`, `merge`, `multicast`) and instance operators (`map`, `filter`, `reduce`, `tap`) for building declarative data flows.
+
+```typescript
+class Source<Data> {
+  // Factory methods
+  static fromInterval(ms: number): Source<number>;
+  static fromArray<T>(arr: T[]): Source<T>;
+  static fromPromise<T>(p: Promise<T>): Source<T>;
+  static join<T extends any[]>(sources: { [K in keyof T]: Source<T[K]> }): Source<T>;
+  static merge<T>(...sources: Source<T>[]): Source<T>;
+  static multicast<T>(factory: () => Source<T>): Source<T>;  // shared hot source
+
+  // Operators
+  map<T>(fn: (v: Data) => T): Source<T>;
+  filter(fn: (v: Data) => boolean): Source<Data>;
+  reduce<T>(fn: (acm: T, cur: Data) => T, begin: T): Source<T>;
+  tap(fn: (v: Data) => void): Source<Data>;
+  operator<T>(fn: (v: Source<Data>) => Source<T>): Source<T>;
+
+  // Consume
+  subscribe(callback: (data: Data) => void): () => void;
+  toObserver(): TObserver<Data>;
+}
+```
+
+The following example is taken from the [react-face-kyc](https://github.com/react-declarative/react-face-kyc) demo. It counts consecutive valid frames from a camera, triggers a recording when the count reaches one, and fires a completion event after `CC_SECONDS_TO_VERIFY` seconds:
+
+```tsx
+import { Source } from 'react-declarative';
+
+const verifyCompleteEmitter = Source.multicast(() =>
+  Source
+    .join([
+      captureStateEmitter,
+      Source.fromInterval(1_000),
+    ])
+    .reduce((acm, [{ state: isValid }]) => {
+      if (isValid) {
+        return acm + 1;
+      }
+      return 0;
+    }, 0)
+    .tap((ticker) => {
+      if (ticker === 1) {
+        mediaRecorderInstance.beginCapture();
+      }
+    })
+    .filter((ticker) => ticker === CC_SECONDS_TO_VERIFY)
+    .tap(() => {
+      mediaRecorderInstance.endCapture();
+    })
+);
+```
+
+`Source.multicast` creates a **shared hot source** — all subscribers receive the same stream from a single underlying subscription, making it efficient for sensors, WebSocket feeds, or intervals.
+
+<Note>
+`Source.join` is analogous to `combineLatest` in RxJS: it waits for all sources to emit, then passes an array of their latest values downstream.
+</Note>
+
+</Accordion>
+
+---
+
+## React hooks
+
+<Accordion title="useSubject">
+
+Creates a `Subject` that lives for the lifetime of the component. Optionally forwards emissions from an external `TSubject`.
+
+```typescript
+useSubject<Data>(target?: TSubject<Data> | null): Subject<Data>
+```
+
+```tsx
+import { useSubject } from 'react-declarative';
+
+const submitSubject = useSubject<void>();
+
+// Trigger from a button
+<button onClick={() => submitSubject.next()}>Submit</button>
+
+// Listen in the same or a child component
+useSubscription(() =>
+  submitSubject.subscribe(() => handleSubmit())
+);
+```
+
+</Accordion>
+
+<Accordion title="useBehaviorSubject">
+
+Creates a `BehaviorSubject` with an optional initial value. The instance is stable across renders.
+
+```typescript
+useBehaviorSubject<Data>(initialData?: Data | null): BehaviorSubject<Data>
+```
+
+```tsx
+import { useBehaviorSubject, useSubjectValue } from 'react-declarative';
+
+// Parent creates the subject
+const query$ = useBehaviorSubject<string>('');
+
+// Mutate it
+<input onChange={(e) => query$.next(e.target.value)} />
+
+// Child reads it reactively
+const query = useSubjectValue(query$, '');
+```
+
+</Accordion>
+
+<Accordion title="useSubscription">
+
+Registers a subscription on mount and cleans it up on unmount. Equivalent to `useEffect(fn, [])`.
+
+```typescript
+useSubscription(fn: () => () => void): void
+```
+
+```tsx
+import { useSubscription } from 'react-declarative';
+
+useSubscription(() =>
+  ioc.kanbanService.updateSubject.subscribe((action) => {
+    dispatch(action);
+  })
+);
+```
+
+</Accordion>
+
+<Accordion title="useSubjectValue">
+
+Subscribes to a `TSubject` and returns its latest value as React state.
+
+```typescript
+useSubjectValue<Data>(
+  target: TSubject<Data>,
+  initialValue?: Data | (() => Data)
+): Data
+```
+
+```tsx
+import { useSubjectValue } from 'react-declarative';
+
+// Bind a Subject to local state
+const isConnected = useSubjectValue(connectionSubject, false);
+
+return <span>{isConnected ? 'Online' : 'Offline'}</span>;
+```
+
+</Accordion>
+
+<Accordion title="useChangeSubject">
+
+Returns a `Subject` that emits whenever the given value changes (skips the initial render). Useful for converting a prop or state value into a reactive stream.
+
+```typescript
+useChangeSubject<T>(value: T): Subject<T>
+```
+
+```tsx
+import { useChangeSubject, useSubscription } from 'react-declarative';
+
+const searchSubject = useChangeSubject(searchQuery);
+
+useSubscription(() =>
+  searchSubject
+    .debounce(300)
+    .subscribe((query) => fetchResults(query))
+);
+```
+
+</Accordion>
+
+<Accordion title="useChange">
+
+Like `useEffect` but skips the initial mount. Runs the effect only when dependencies change after the first render.
+
+```typescript
+useChange(
+  effect: React.EffectCallback,
+  deps?: React.DependencyList,
+  stopWatchByDefault?: boolean
+): {
+  resetWatcher: () => void;  // treat the next run as the first again
+  beginWatch: () => void;    // re-enable after stopWatch
+  stopWatch: () => void;     // pause watching
+}
+```
+
+```tsx
+import { useChange } from 'react-declarative';
+
+// Only runs when `userId` changes, not on initial mount
+useChange(() => {
+  fetchProfile(userId);
+}, [userId]);
+```
+
+<Tip>
+Prefer `useChangeSubject` over `useChange` when you need to pipe the changed value into an operator chain (debounce, filter, etc.). Use `useChange` when you only need a plain side effect.
+</Tip>
+
+</Accordion>
+
+---
+
+## Connecting components with Observer
+
+The recommended pattern for cross-component communication is to create a shared subject in a service class and subscribe to it in React with `useSubscription`:
+
+```tsx
+// services/NotificationService.ts
+import { Subject } from 'react-declarative';
+
+export class NotificationService {
+  readonly message$ = new Subject<string>();
+
+  notify(msg: string) {
+    this.message$.next(msg);
+  }
+}
+
+// components/NotificationBanner.tsx
+import { useSubscription, useSubjectValue } from 'react-declarative';
+
+const NotificationBanner = () => {
+  const [messages, setMessages] = useState<string[]>([]);
+
+  useSubscription(() =>
+    ioc.notificationService.message$.subscribe((msg) =>
+      setMessages((prev) => [...prev, msg])
+    )
+  );
+
+  return (
+    <ul>
+      {messages.map((m, i) => <li key={i}>{m}</li>)}
+    </ul>
+  );
+};
+```
+

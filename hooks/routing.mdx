@@ -1,0 +1,424 @@
+---
+title: "Built-in Router: Switch, OutletView & Route Utilities"
+description: "How to configure the react-declarative built-in router with guard, prefetch, unload, and redirect — plus the hooks and utilities for reading route state."
+---
+
+react-declarative ships a complete client-side router that does not depend on react-router. It is built on the [`history`](https://github.com/remix-run/history) package and uses [`path-to-regexp`](https://github.com/pillarjs/path-to-regexp) for pattern matching. The router supports async guards, route-level data prefetching, cleanup on leave, and redirect logic — all declared in a plain configuration array passed to the `Switch` component. This page covers the `Switch` component, `OutletView`, all route-related hooks, and the suite of utility functions.
+
+## Quick start
+
+```tsx
+import { Switch, createWindowHistory } from 'react-declarative';
+
+const history = createWindowHistory();
+
+const routes = [
+  {
+    path: '/mint-page',
+    guard: async () => await ioc.roleService.has('whitelist'),
+    prefetch: async () => await ioc.ethersService.init(),
+    unload: async () => await ioc.ethersService.dispose(),
+    redirect: () => {
+      let isOk = true;
+      isOk = isOk && ioc.ethersService.isMetamaskAvailable;
+      isOk = isOk && ioc.ethersService.isProviderConnected;
+      isOk = isOk && ioc.ethersService.isAccountEnabled;
+      if (isOk) {
+        return '/connect-page';
+      }
+      return null;
+    },
+  },
+];
+
+const App = () => (
+  <Switch history={history} items={routes} />
+);
+```
+
+---
+
+## Switch component
+
+`Switch` renders the element for the first route whose `path` pattern matches the current `history` location. It handles async lifecycle hooks, loading states, and error boundaries on its own.
+
+```typescript
+interface ISwitchItem {
+  path: string;
+  element?: React.ComponentType<any>;     // component to render
+  guard?: () => boolean | Promise<boolean>;
+  prefetch?: (
+    params: Record<string, any>
+  ) => Record<string, any> | Promise<Record<string, any>>;
+  unload?: (params: Record<string, any>) => Promise<void> | void;
+  redirect?: string | ((params: Record<string, any>) => string | null);
+}
+
+interface ISwitchProps {
+  items: ISwitchItem[];
+  history?: BrowserHistory | MemoryHistory | HashHistory;
+  animation?: 'fadeIn' | 'slideIn' | ...;  // FetchView animation
+  Loader?: React.ComponentType<any>;
+  Forbidden?: React.ComponentType<any>;
+  NotFound?: React.ComponentType<any>;
+  Error?: React.ComponentType<any>;
+  fallback?: (e: Error) => void;
+  throwError?: boolean;
+  onLoadStart?: () => void;
+  onLoadEnd?: (isOk?: boolean) => void;
+  onInit?: () => void;
+  onDispose?: () => void;
+  children?: (result: ISwitchResult) => React.ReactNode;
+}
+```
+
+**Route lifecycle per navigation**
+
+1. **`guard()`** — if it returns `false`, the `Forbidden` component is rendered.
+2. **`prefetch(params)`** — called after a successful guard; its return value is merged into `params` and forwarded as props to `element`.
+3. **`redirect`** — if it returns a non-null string, `Switch` navigates there instead of rendering `element`.
+4. **`element`** — the component is rendered with the merged `params` as props.
+5. **`unload(params)`** — called when the user navigates away from this route.
+
+<Note>
+Routes are sorted internally by specificity (more path segments with fewer params rank higher), so `/users/profile` matches before `/users/:id` without any manual ordering.
+</Note>
+
+<Accordion title="Full Switch example">
+
+```tsx
+import { Switch, createWindowHistory } from 'react-declarative';
+import CircularProgress from '@mui/material/CircularProgress';
+
+const history = createWindowHistory();
+
+const routes = [
+  {
+    path: '/',
+    element: HomePage,
+  },
+  {
+    path: '/login',
+    element: LoginPage,
+    redirect: () => {
+      if (ioc.authService.isLoggedIn) {
+        return '/dashboard';
+      }
+      return null;
+    },
+  },
+  {
+    path: '/dashboard',
+    element: DashboardPage,
+    guard: () => ioc.authService.isLoggedIn,
+  },
+  {
+    path: '/mint-page',
+    element: MintPage,
+    guard: async () => await ioc.roleService.has('whitelist'),
+    prefetch: async (params) => {
+      await ioc.ethersService.init();
+      return { chainId: await ioc.ethersService.getChainId() };
+    },
+    unload: async () => {
+      await ioc.ethersService.dispose();
+    },
+    redirect: () => {
+      let isOk = true;
+      isOk = isOk && ioc.ethersService.isMetamaskAvailable;
+      isOk = isOk && ioc.ethersService.isProviderConnected;
+      isOk = isOk && ioc.ethersService.isAccountEnabled;
+      return isOk ? '/connect-page' : null;
+    },
+  },
+  {
+    path: '/users/:id',
+    element: UserPage,
+    prefetch: async ({ id }) => ({
+      user: await ioc.userService.findById(id),
+    }),
+  },
+];
+
+const App = () => (
+  <Switch
+    history={history}
+    items={routes}
+    Loader={() => <CircularProgress />}
+    Forbidden={() => <div>Access denied</div>}
+    NotFound={() => <div>Page not found</div>}
+    animation="fadeIn"
+  />
+);
+```
+
+</Accordion>
+
+**Static methods**
+
+```typescript
+// Listen for every completed navigation
+Switch.listen((result: ISwitchResult) => void): () => void;
+
+// Await the next navigation (resolves with the result)
+Switch.waitForNavigate(): Promise<ISwitchResult>;
+```
+
+---
+
+## OutletView component
+
+`OutletView` implements nested sub-routing. Use `history.replace` to navigate between subviews within the same page. It integrates with react-declarative's `One`/form layer via `onChange` and `onSubmit` callbacks.
+
+```typescript
+interface IOutletViewProps<Data, Payload> {
+  routes: IOutletItem[];
+  history: MemoryHistory | BrowserHistory | HashHistory;
+  params?: Record<string, any>;
+  initialData?: Partial<Data>;
+  onChange?: (data: Data, initial: boolean, source: string) => void;
+  onSubmit?: (data: Data, payload: Payload) => boolean | Promise<boolean>;
+  onLoadStart?: () => void;
+  onLoadEnd?: (isOk: boolean) => void;
+  animation?: string;
+  readonly?: boolean;
+  waitForChangesDelay?: number;
+}
+```
+
+```tsx
+import { OutletView } from 'react-declarative';
+
+const subRoutes = [
+  { path: '/settings/profile', element: ProfileTab },
+  { path: '/settings/security', element: SecurityTab },
+  { path: '/settings/billing', element: BillingTab },
+];
+
+const SettingsPage = () => (
+  <OutletView
+    routes={subRoutes}
+    history={ioc.routerService}
+    onChange={(data) => console.log('form changed', data)}
+  />
+);
+```
+
+---
+
+## Route hooks
+
+<Accordion title="useRouteParams">
+
+Returns the path parameters for the currently active route as reactive state. Re-renders whenever the URL changes.
+
+```typescript
+useRouteParams<T extends Record<string, any> = Record<string, any>>(
+  routes: ISwitchItem[],
+  history: MemoryHistory | BrowserHistory | HashHistory
+): T
+```
+
+```tsx
+import { useRouteParams } from 'react-declarative';
+
+interface UserParams {
+  id: string;
+}
+
+const UserPage = () => {
+  const { id } = useRouteParams<UserParams>(routes, history);
+
+  useEffect(() => {
+    loadUser(id);
+  }, [id]);
+
+  return <div>User: {id}</div>;
+};
+```
+
+</Accordion>
+
+<Accordion title="useRouteItem">
+
+Returns the matching `ISwitchItem` object for the current route, or `undefined` if no route matches.
+
+```typescript
+useRouteItem<T extends Record<string, any>, I extends ISwitchItem>(
+  routes: I[],
+  history: MemoryHistory | BrowserHistory | HashHistory
+): I | undefined
+```
+
+```tsx
+import { useRouteItem } from 'react-declarative';
+
+const currentRoute = useRouteItem(routes, history);
+
+// Use route metadata from your route config
+if (currentRoute?.requiresAuth) {
+  return <Redirect to="/login" />;
+}
+```
+
+</Accordion>
+
+---
+
+## Utility functions
+
+<Accordion title="getRouteParams">
+
+Imperatively extract path parameters from a pathname string without mounting a hook.
+
+```typescript
+getRouteParams<T = Record<string, any>>(
+  routes: { path: string }[],
+  pathname: string
+): T | null
+```
+
+```typescript
+import { getRouteParams } from 'react-declarative';
+
+const params = getRouteParams(
+  [{ path: '/users/:id/posts/:postId' }],
+  '/users/42/posts/7'
+);
+// → { id: '42', postId: '7' }
+```
+
+</Accordion>
+
+<Accordion title="parseRouteUrl">
+
+Match a single route template against a URL and return the match object (params, index, etc.) or `null`.
+
+```typescript
+parseRouteUrl(template: string, url: string): MatchResult | null
+```
+
+```typescript
+import { parseRouteUrl } from 'react-declarative';
+
+const result = parseRouteUrl('/users/:id', '/users/42');
+// → { params: { id: '42' }, path: '/users/42', index: 0 }
+
+parseRouteUrl('/users/:id', '/posts/1');
+// → null
+```
+
+</Accordion>
+
+<Accordion title="toRouteUrl">
+
+Compile a route template with a params object into a concrete URL string.
+
+```typescript
+toRouteUrl(template: string, params: object): string
+```
+
+```typescript
+import { toRouteUrl } from 'react-declarative';
+
+const url = toRouteUrl('/users/:id/posts/:postId', { id: 42, postId: 7 });
+// → '/users/42/posts/7'
+```
+
+</Accordion>
+
+<Accordion title="createRouteParamsManager / createRouteItemManager">
+
+Non-hook equivalents of `useRouteParams` and `useRouteItem` for use outside of React components (e.g., in services).
+
+```typescript
+createRouteParamsManager<T, I>(
+  routes: I[],
+  history: MemoryHistory | BrowserHistory | HashHistory
+): {
+  params: T;
+  subscribe(fn: () => void): () => void;
+  dispose(): void;
+}
+
+createRouteItemManager<T, I>(
+  routes: I[],
+  history: MemoryHistory | BrowserHistory | HashHistory
+): {
+  item: I | undefined;
+  subscribe(fn: () => void): () => void;
+  dispose(): void;
+}
+```
+
+```typescript
+import { createRouteParamsManager } from 'react-declarative';
+
+const manager = createRouteParamsManager(routes, history);
+
+const unsub = manager.subscribe(() => {
+  console.log('params changed', manager.params);
+});
+
+// Clean up when done
+unsub();
+manager.dispose();
+```
+
+</Accordion>
+
+---
+
+## History objects
+
+`Switch` and all route hooks require a `history` object from the [`history`](https://github.com/remix-run/history) package. react-declarative re-exports two factory helpers:
+
+<Tabs>
+  <Tab title="createWindowHistory">
+
+`createWindowHistory` selects the right history implementation for the current environment:
+
+- **Browser** (`window.location.protocol !== 'file:'`): uses `createBrowserHistory` — HTML5 pushState routing.
+- **File / SSR** (no `window.location`, or `protocol === 'file:'`): uses `createMemoryHistory`.
+
+```typescript
+import { createWindowHistory } from 'react-declarative';
+
+// Recommended default for web apps
+const history = createWindowHistory();
+
+const App = () => <Switch history={history} items={routes} />;
+```
+
+  </Tab>
+  <Tab title="createManagedHistory">
+
+`createManagedHistory` creates a `MemoryHistory` that persists its current pathname in `sessionStorage`. On reload, the last-visited path is restored — useful for electron / Tauri apps or hybrid mobile apps that use the `file:` protocol.
+
+```typescript
+import { createManagedHistory } from 'react-declarative';
+
+const history = createManagedHistory('app-history', {
+  // Only restore paths that exist in your route config
+  allowed: (pathname) => routes.some(({ path }) =>
+    parseRouteUrl(path, pathname) !== null
+  ),
+  // Optionally normalise the stored path
+  map: (pathname) => pathname.replace(/\?.*$/, ''),
+});
+```
+
+**Parameters**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `storageKey` | `string` | `sessionStorage` key to persist the path |
+| `allowed` | `(pathname: string) => boolean` | Return `false` to discard a restored path |
+| `map` | `(pathname: string) => string` | Transform the path before storing it |
+
+  </Tab>
+</Tabs>
+
+<Tip>
+For most web applications, `createWindowHistory()` is all you need. Use `createManagedHistory` only when you need session-persistent navigation in environments without real URL routing (file protocol, Electron, etc.).
+</Tip>

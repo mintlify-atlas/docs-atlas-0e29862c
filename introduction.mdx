@@ -1,0 +1,75 @@
+---
+title: "react-declarative: JSON-driven React UI framework"
+description: "react-declarative turns TypeScript schemas into MUI forms, data grids, and app shells with automatic state, validation, and responsive layout."
+---
+
+react-declarative is a TypeScript React library that lets you describe your entire UI — forms, data grids, dashboards, and app shells — as a plain JSON/TypeScript schema. The library renders MUI components, handles state management, validation, and responsive 12-column grid layout automatically, so you write configuration instead of boilerplate.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get a working form on screen in under 5 minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Install react-declarative and its MUI peer dependencies
+  </Card>
+  <Card title="Form Engine" icon="table-columns" href="/form-engine/overview">
+    Learn how the declarative field schema and layout system work
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/one">
+    Full reference for the One, List, and all exported APIs
+  </Card>
+</CardGroup>
+
+## What you can build
+
+react-declarative is not just a form builder. The library ships a complete set of composable view components that cover the full range of modern business application UIs.
+
+<CardGroup cols={3}>
+  <Card title="Forms" icon="wpforms" href="/form-engine/overview">
+    JSON-configured forms with 20+ field types and automatic state management
+  </Card>
+  <Card title="Data grids" icon="table" href="/components/list">
+    Filterable, sortable, paginated data grids with mobile support
+  </Card>
+  <Card title="App shells" icon="sidebar" href="/components/scaffold">
+    Full Material Design app shells with sidebar navigation
+  </Card>
+  <Card title="Kanban boards" icon="columns-3" href="/components/kanban">
+    Drag-and-drop Kanban boards with realtime support
+  </Card>
+  <Card title="Wizards" icon="wand-magic-sparkles" href="/components/wizard">
+    Multi-step wizard flows with routing and stepper UI
+  </Card>
+  <Card title="Dashboards" icon="chart-line" href="/components/other-views">
+    Calendar, tile, tree, chat, and many other view components
+  </Card>
+</CardGroup>
+
+## Key capabilities
+
+- **Declarative schema** — describe fields, layouts, and validation rules as a typed `TypedField[]` array; the library does the rest
+- **Automatic state management** — connect a `handler` function or object; `One` fetches, tracks, and emits `onChange` automatically
+- **Responsive 12-column grid** — specify `phoneColumns`, `tabletColumns`, and `desktopColumns` per field group
+- **Rich validation** — `isInvalid`, `isDisabled`, `isVisible`, and `isReadonly` callbacks receive live form state
+- **Slot factory** — swap any default MUI field renderer for your own component without changing the schema
+- **Async hooks** — `useSinglerunAction`, `useQueuedAction`, `useAsyncProgress` for safe concurrent UI interactions
+- **MVVM** — `useCollection`, `useModel`, `useEntity` for ref-managed reactive data collections
+- **Built-in router** — `Switch` with guards, prefetch, unload, and redirect support
+- **Dependency injection** — `provide`, `inject`, `createServiceManager` for IoC-style service wiring
+
+## Explore further
+
+<CardGroup cols={2}>
+  <Card title="Field types reference" icon="list-check" href="/form-engine/field-types">
+    All 20+ field types with props and usage examples
+  </Card>
+  <Card title="Layout reference" icon="object-group" href="/form-engine/layouts">
+    Group, Paper, Expansion, Tabs, Hero, and other layout containers
+  </Card>
+  <Card title="Hooks & Utilities" icon="puzzle-piece" href="/hooks/async-hooks">
+    Async action hooks, MVVM helpers, and reactive primitives
+  </Card>
+  <Card title="Advanced patterns" icon="layer-group" href="/advanced/slot-factory">
+    Slot factory, dependency injection, and AI-assisted schema generation
+  </Card>
+</CardGroup>

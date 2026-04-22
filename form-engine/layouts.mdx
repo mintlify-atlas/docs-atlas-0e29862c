@@ -1,0 +1,360 @@
+---
+title: "Form Engine Layouts: Group, Tabs, Condition & More"
+description: "Guide to every react-declarative layout container: Group, Paper, Outline, Expansion, Tabs, Hero, Center, Stretch, Condition, Fragment, Div, Box, and custom."
+---
+
+react-declarative separates field rendering from layout entirely. Every container in a form schema is a layout entry — an `IField` object whose `type` maps to a layout constant. Layouts can be nested arbitrarily, and each carries the same responsive column props (`columns`, `phoneColumns`, `tabletColumns`, `desktopColumns`) used by fields.
+
+## Column system
+
+The form grid is 12 columns wide. All layout and field widths are expressed as string integers from `'1'` to `'12'`, where `'12'` is full width.
+
+```tsx
+{
+  type: FieldType.Group,
+  columns: '6',        // half width on all screens by default
+  phoneColumns: '12',  // full width on phones
+  tabletColumns: '6',  // half width on tablets
+  desktopColumns: '4', // one-third on desktop
+  fields: [ /* ... */ ],
+}
+```
+
+<Tip>
+When you set `columns`, it applies to all breakpoints. Override individual breakpoints with `phoneColumns`, `tabletColumns`, or `desktopColumns` to get responsive behaviour.
+</Tip>
+
+## Structural layouts
+
+Containers that control how fields are arranged in the DOM.
+
+<Tabs>
+  <Tab title="Group">
+    The fundamental layout container. Renders children inside a CSS grid row. All other layout types inherit the column system from Group.
+
+    ```tsx
+    const fields: TypedField[] = [
+      {
+        type: FieldType.Group,
+        phoneColumns: '12',
+        tabletColumns: '6',
+        desktopColumns: '4',
+        fields: [
+          {
+            type: FieldType.Text,
+            name: 'firstName',
+            title: 'First name',
+            defaultValue: 'Petr',
+            description: 'Your first name',
+          },
+          {
+            type: FieldType.Text,
+            name: 'lastName',
+            title: 'Last name',
+            defaultValue: 'Tripolsky',
+          },
+        ],
+      },
+    ];
+    ```
+  </Tab>
+
+  <Tab title="Fragment">
+    A zero-overhead wrapper that groups fields without adding any DOM node or padding. Useful when you need conditional groups without visual chrome.
+
+    ```tsx
+    {
+      type: FieldType.Fragment,
+      fields: [
+        { type: FieldType.Text, name: 'field1', title: 'Field 1' },
+        { type: FieldType.Text, name: 'field2', title: 'Field 2' },
+      ],
+    }
+    ```
+  </Tab>
+
+  <Tab title="Div">
+    Wraps children in a plain `<div>`. Accepts standard CSS and MUI `sx` props for custom styling without Paper elevation.
+
+    ```tsx
+    {
+      type: FieldType.Div,
+      style: { border: '1px dashed #ccc', padding: 8 },
+      fields: [
+        { type: FieldType.Text, name: 'notes', title: 'Notes', inputRows: 3 },
+      ],
+    }
+    ```
+  </Tab>
+
+  <Tab title="Box">
+    A MUI `Box`-based container. Full access to the MUI `sx` prop for theme-aware styles.
+
+    ```tsx
+    {
+      type: FieldType.Box,
+      sx: { backgroundColor: 'action.hover', borderRadius: 2, p: 2 },
+      fields: [
+        { type: FieldType.Checkbox, name: 'consent', title: 'I consent' },
+      ],
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Card layouts
+
+Layouts that visually group content inside a raised or outlined surface.
+
+<Tabs>
+  <Tab title="Paper">
+    Wraps children in a MUI `Paper` (elevated card). Inner padding is configurable.
+
+    ```tsx
+    {
+      type: FieldType.Paper,
+      innerPadding: '16px',
+      fields: [
+        { type: FieldType.Line, title: 'Checkboxes' },
+        { type: FieldType.Checkbox, name: 'checkbox1', title: 'Option A', columns: '6' },
+        { type: FieldType.Checkbox, name: 'checkbox2', title: 'Option B', columns: '6' },
+      ],
+    }
+    ```
+
+    <Tip>
+    Set `outlinePaper` on `<One />` (or on the field itself) to render all Paper layouts as outlined cards instead of elevated ones — useful for flat design systems.
+    </Tip>
+  </Tab>
+
+  <Tab title="Outline">
+    A bordered card with an optional `title` label that floats on the top border, similar to a MUI `OutlinedInput` fieldset.
+
+    ```tsx
+    {
+      type: FieldType.Outline,
+      title: 'Address',
+      fields: [
+        { type: FieldType.Text, name: 'street', title: 'Street', columns: '8' },
+        { type: FieldType.Text, name: 'zip', title: 'ZIP', columns: '4' },
+        { type: FieldType.Text, name: 'city', title: 'City' },
+      ],
+    }
+    ```
+  </Tab>
+
+  <Tab title="Expansion">
+    A collapsible accordion panel with a `title` and optional `description` in the summary row.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `title` | `string` | Panel header text |
+    | `description` | `string` | Secondary text in the header |
+    | `expansionOpened` | `boolean` | Whether the panel starts expanded |
+
+    ```tsx
+    {
+      type: FieldType.Expansion,
+      title: 'Advanced settings',
+      description: 'Rarely changed options',
+      expansionOpened: false,
+      fields: [
+        { type: FieldType.Switch, name: 'devMode', title: 'Developer mode' },
+        { type: FieldType.Switch, name: 'verbose', title: 'Verbose logging' },
+      ],
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Navigation layouts
+
+<Tabs>
+  <Tab title="Tabs">
+    Renders a MUI tab bar. Each child group maps to one tab. The `tabList` array provides the tab labels.
+
+    **Key props**
+
+    | Prop | Type | Description |
+    |---|---|---|
+    | `tabList` | `string[]` | Tab label strings |
+    | `tabIndex` | `number` | Initially active tab index |
+    | `tabVariant` | `'fullWidth' \| 'standard' \| 'scrollable'` | MUI tab variant |
+    | `tabColor` | `'primary' \| 'secondary'` | Indicator colour |
+    | `tabLine` | `boolean` | Show a divider under the tab bar |
+    | `tabKeepFlow` | `boolean` | Allow content to expand the container height |
+    | `tabChange` | `(idx: number) => void` | Callback on tab switch |
+
+    ```tsx
+    {
+      type: FieldType.Tabs,
+      tabList: ['Profile', 'Security', 'Notifications'],
+      tabIndex: 0,
+      tabVariant: 'fullWidth',
+      fields: [
+        {
+          type: FieldType.Group,
+          fields: [
+            { type: FieldType.Text, name: 'displayName', title: 'Display name' },
+          ],
+        },
+        {
+          type: FieldType.Group,
+          fields: [
+            { type: FieldType.Text, name: 'password', title: 'New password', inputType: 'password' },
+          ],
+        },
+        {
+          type: FieldType.Group,
+          fields: [
+            { type: FieldType.Switch, name: 'emailAlerts', title: 'Email alerts' },
+          ],
+        },
+      ],
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Positioning layouts
+
+<Tabs>
+  <Tab title="Hero">
+    Absolute-positioning container for overlaying content at precise coordinates. All position and size props accept CSS strings or `ISizeCallback<Data>` functions for data-driven sizing.
+
+    **Key props** (all accept `string | ISizeCallback<Data>`)
+
+    `top`, `left`, `right`, `bottom`, `width`, `height`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight` — plus phone/tablet/desktop variants for each.
+
+    ```tsx
+    {
+      type: FieldType.Hero,
+      top: '10px',
+      left: '10px',
+      width: '200px',
+      height: '200px',
+      fields: [
+        { type: FieldType.Component, element: AvatarOverlay },
+      ],
+    }
+    ```
+  </Tab>
+
+  <Tab title="Center">
+    Centres its children both horizontally and vertically within the available space.
+
+    ```tsx
+    {
+      type: FieldType.Center,
+      fields: [
+        { type: FieldType.Rating, name: 'score', title: 'Score' },
+      ],
+    }
+    ```
+  </Tab>
+
+  <Tab title="Stretch">
+    Expands to fill all available vertical space in its parent container. Useful for dashboards where a panel should occupy remaining height.
+
+    ```tsx
+    {
+      type: FieldType.Stretch,
+      fields: [
+        { type: FieldType.Component, element: ChartWidget },
+      ],
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Conditional layout
+
+`FieldType.Condition` controls whether its children are rendered at all, based on a predicate function evaluated against the current form data.
+
+```tsx
+{
+  type: FieldType.Condition,
+  condition: ({ plan }) => plan === 'enterprise',
+  fields: [
+    { type: FieldType.Text, name: 'ssoUrl', title: 'SSO endpoint URL' },
+    { type: FieldType.Switch, name: 'auditLog', title: 'Enable audit log' },
+  ],
+}
+```
+
+**Key props**
+
+| Prop | Type | Description |
+|---|---|---|
+| `condition` | `(data, payload) => boolean \| Promise<boolean>` | Show children when `true` |
+| `shouldCondition` | `(prevData, nextData, payload) => boolean` | Memoisation guard to skip re-evaluation |
+| `conditionLoading` | `React.ComponentType` | Rendered while async condition resolves |
+| `conditionElse` | `React.ComponentType` | Rendered when condition is `false` |
+
+<Warning>
+Fields inside a hidden `Condition` layout are still part of the schema, so their `defaultValue` values are included in `getInitialData`. Use `isVisible` on individual fields if you need to exclude them from the data shape entirely.
+</Warning>
+
+## Custom layout
+
+`FieldType.Layout` lets you provide a fully custom React component for a layout container while keeping children managed by the form engine.
+
+```tsx
+{
+  type: FieldType.Layout,
+  customLayout: ({ children, onChange, _fieldData }) => (
+    <MyCustomCard title={_fieldData.sectionTitle}>
+      {children}
+    </MyCustomCard>
+  ),
+  fields: [
+    { type: FieldType.Text, name: 'sectionTitle', title: 'Section title' },
+  ],
+}
+```
+
+## Nested layout example
+
+Layouts compose freely. The following schema places a rating widget in a narrow left column and a name/gender form in the wider right column, with each group going full-width on phones:
+
+```tsx
+const fields: TypedField[] = [
+  {
+    type: FieldType.Group,
+    fields: [
+      {
+        type: FieldType.Rating,
+        columns: '2',
+        phoneColumns: '12',
+        fieldBottomMargin: '0',
+        name: 'rating',
+        defaultValue: 3,
+      },
+      {
+        type: FieldType.Group,
+        columns: '10',
+        phoneColumns: '12',
+        fields: [
+          {
+            name: 'lastName',
+            type: FieldType.Text,
+            title: 'Last name',
+            description: 'Required',
+          },
+          {
+            type: FieldType.Combo,
+            title: 'Gender',
+            placeholder: 'Choose your gender',
+            name: 'gender',
+            itemList: ['Male', 'Female'],
+          },
+        ],
+      },
+    ],
+  },
+];
+```
+
+In this layout the `Rating` occupies 2/12 (≈17 %) of the row and the nested `Group` occupies 10/12 (≈83 %). On phones both drop to full width (`'12'`).

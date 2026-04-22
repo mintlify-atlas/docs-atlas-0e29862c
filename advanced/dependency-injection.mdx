@@ -1,0 +1,244 @@
+---
+title: 'Dependency Injection and IoC Container'
+description: 'Wire services with the react-declarative IoC container using provide, inject, and createServiceManager for route-level lifecycle and typed route management.'
+keywords: ['dependency injection', 'IoC', 'provide', 'inject', 'serviceManager', 'createServiceManager', 'prefetch', 'unload', 'createRouteItemManager']
+---
+
+React-declarative ships a built-in IoC container that decouples service creation from consumption. The `provide` and `inject` helpers, backed by `serviceManager`, give you constructor injection for plain TypeScript classes — no decorators, no framework lock-in — and integrate naturally with the library's routing primitives.
+
+## Core API
+
+| Export | Description |
+|--------|-------------|
+| `provide(key, factory)` | Register a factory function under a key (alias for `serviceManager.registerCreator`). |
+| `inject<T>(key)` | Resolve a service by key. Creates the instance on first call and caches it as a singleton. |
+| `waitForProvide()` | Wait for any asynchronously-constructed services to finish resolving. |
+| `serviceManager` | The global singleton `ServiceManager` instance. |
+| `createServiceManager(name)` | Create a scoped service manager that falls back to the global container. |
+| `createRouteItemManager(routes, history)` | Returns a function that gives the currently matched route item. |
+| `createRouteParamsManager(routes, history)` | Returns a function that gives the current route params object. |
+
+All exports are available directly from `react-declarative`.
+
+## Setting up DI
+
+<Steps>
+  <Step title="Define service keys">
+    Use symbols so key collisions are impossible at runtime.
+
+    ```typescript
+    // src/services/TYPES.ts
+    export const TYPES = {
+      authService:   Symbol('authService'),
+      routerService: Symbol('routerService'),
+    } as const;
+    ```
+  </Step>
+
+  <Step title="Implement services">
+    Implement the optional `IService` interface to participate in the prefetch/unload lifecycle.
+
+    ```typescript
+    // src/services/AuthService.ts
+    import { IService } from 'react-declarative';
+
+    export class AuthService implements IService {
+      private _token: string | null = null;
+
+      get isAuthorized() {
+        return this._token !== null;
+      }
+
+      hasFeature = (...features: string[]) =>
+        features.every((f) => this.features.has(f));
+
+      hasRole = (role: string) => this._roles.has(role);
+
+      private features = new Set<string>();
+      private _roles   = new Set<string>();
+
+      prefetch = async () => {
+        // called by serviceManager.prefetch() — load session data here
+        const session = await fetch('/api/session').then((r) => r.json());
+        this._token   = session.token ?? null;
+        this.features = new Set(session.features ?? []);
+        this._roles   = new Set(session.roles ?? []);
+      };
+
+      unload = async () => {
+        // called by serviceManager.unload() — tear down on route exit
+        this._token = null;
+      };
+    }
+    ```
+  </Step>
+
+  <Step title="Register services">
+    Call `provide` (or `serviceManager.registerCreator`) before the app mounts.
+
+    ```typescript
+    // src/config.ts
+    import { provide } from 'react-declarative';
+    import { TYPES }   from './services/TYPES';
+    import { AuthService }   from './services/AuthService';
+    import { RouterService } from './services/RouterService';
+
+    provide(TYPES.authService,   () => new AuthService());
+    provide(TYPES.routerService, () => new RouterService());
+    ```
+  </Step>
+
+  <Step title="Build an ioc accessor object">
+    Centralise `inject` calls in a single `ioc.ts` file so the rest of the codebase never imports `inject` directly.
+
+    ```typescript
+    // src/ioc.ts
+    import { inject } from 'react-declarative';
+    import { TYPES }  from './services/TYPES';
+    import type { AuthService }   from './services/AuthService';
+    import type { RouterService } from './services/RouterService';
+
+    export const ioc = {
+      get authService()   { return inject<AuthService>(TYPES.authService); },
+      get routerService() { return inject<RouterService>(TYPES.routerService); },
+    };
+    ```
+
+    Usage anywhere in the app:
+
+    ```typescript
+    import { ioc } from '../ioc';
+
+    if (ioc.authService.isAuthorized) {
+      ioc.routerService.push('/dashboard');
+    }
+    ```
+  </Step>
+
+  <Step title="Prefetch before render">
+    Call `serviceManager.prefetch()` once before the root component renders. This invokes `prefetch()` on every registered service in dependency order.
+
+    ```typescript
+    // src/index.tsx
+    import React from 'react';
+    import ReactDOM from 'react-dom';
+    import { serviceManager } from 'react-declarative';
+    import './config'; // side-effect: runs provide() calls
+
+    (async () => {
+      await serviceManager.prefetch();
+      ReactDOM.render(<App />, document.getElementById('root'));
+    })();
+    ```
+  </Step>
+</Steps>
+
+## Route-level lifecycle with createServiceManager
+
+`createServiceManager` creates a scoped container. Its `inject` looks up the local container first, then falls back to the global one. This is useful for route modules that need their own services.
+
+```typescript
+// src/pages/ProfilePage/services.ts
+import { createServiceManager } from 'react-declarative';
+import { ProfileViewService }   from './ProfileViewService';
+
+const PROFILE_TYPES = {
+  viewService: Symbol('profileViewService'),
+};
+
+const { provide, inject, prefetch, unload } =
+  createServiceManager('profile-page');
+
+provide(PROFILE_TYPES.viewService, () => new ProfileViewService());
+
+export const profileIoc = {
+  get viewService() {
+    return inject<ProfileViewService>(PROFILE_TYPES.viewService);
+  },
+};
+
+// Call prefetch() when the route is entered, unload() when it is left.
+export { prefetch as profilePrefetch, unload as profileUnload };
+```
+
+Inside an outlet or page component:
+
+```tsx
+import { useEffect } from 'react';
+import { profilePrefetch, profileUnload, profileIoc } from './services';
+
+export const ProfilePage = () => {
+  useEffect(() => {
+    profilePrefetch();
+    return () => { profileUnload(); };
+  }, []);
+
+  return <One fields={fields} handler={() => profileIoc.viewService.load()} />;
+};
+```
+
+## Using ioc with routing guards
+
+The `ioc` accessor integrates directly with the `<Switch />` route config. Guards run synchronously when the router evaluates each path:
+
+```typescript
+import { ioc } from '../ioc';
+import type { ISwitchItem } from 'react-declarative';
+
+interface IRouteItem extends ISwitchItem {
+  sideMenu?: string;
+}
+
+export const routes: IRouteItem[] = [
+  {
+    path: '/',
+    redirect: () => (ioc.authService.isAuthorized ? '/dashboard' : '/login_page'),
+  },
+  {
+    path: '/dashboard',
+    guard:   () => ioc.authService.hasFeature('dashboard_read'),
+    element: DashboardPage,
+  },
+  {
+    path: '/ticket/:id/card',
+    guard:   () => ioc.authService.hasFeature('ticket_read'),
+    element: TicketOnePage,
+  },
+  {
+    path: '/settings',
+    guard:   () => ioc.authService.hasRole('admin'),
+    element: SettingsPage,
+  },
+];
+```
+
+## Typed route management
+
+`createRouteItemManager` and `createRouteParamsManager` wrap `RouteManager` to expose the currently matched route item and its params through a simple function call — useful for services that need route context without hooking into React.
+
+```typescript
+import { createBrowserHistory } from 'history';
+import { createRouteItemManager, createRouteParamsManager } from 'react-declarative';
+import { routes } from './routes';
+
+const history = createBrowserHistory();
+
+export const getRouteItem   = createRouteItemManager(routes, history);
+export const getRouteParams = createRouteParamsManager(routes, history);
+
+// Read anywhere — no hook required:
+const item   = getRouteItem();   // current matched route item
+const params = getRouteParams(); // { id: '42', ... }
+```
+
+## Visualising the dependency graph
+
+`serviceManager.toUML()` emits a PlantUML YAML diagram of the resolution tree, which you can paste into [planttext.com](https://www.planttext.com/) for a visual overview. Call it after all services have been injected:
+
+```typescript
+console.log(serviceManager.toUML());
+```
+
+<Tip>
+  Call `serviceManager.disableUML()` in production builds. UML collection has a small runtime overhead and is only needed during development.
+</Tip>

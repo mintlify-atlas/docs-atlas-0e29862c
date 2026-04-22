@@ -1,0 +1,352 @@
+---
+title: "MVVM Hooks: Collections, Models & Entities"
+description: "Explore useCollection, useModel, useEntity, and useListEditor — the react-declarative hooks that bring Backbone-style MVVM reactivity to React components."
+---
+
+react-declarative provides a set of hooks that implement the Model–View–ViewModel (MVVM) pattern familiar from Backbone.js and Angular. Each hook wraps a plain class (`Collection`, `Model`, or `Entity`) in a ref-managed adapter, triggers React re-renders through controlled state updates, and exposes async-safe mutation methods. This page documents all four MVVM hooks and the underlying classes they expose.
+
+## Underlying classes
+
+react-declarative exports the raw MVVM classes for use outside of React (e.g., in services or test helpers):
+
+```typescript
+import { Collection, Entity, Model, EntityNotFoundError } from 'react-declarative';
+import type { ICollectionAdapter, IEntityAdapter, IModelAdapter } from 'react-declarative';
+```
+
+| Class | Description |
+|---|---|
+| `Collection<T>` | Ordered list of `Entity` instances with `push`, `upsert`, `remove`, `findById` |
+| `Entity<T>` | Single reactive record with `setData`, `refresh`, `toObject` |
+| `Model<T>` | Plain-object reactive model — similar to Entity but without an `id` |
+
+The hooks below wrap these classes so that mutations automatically schedule React re-renders via `setState`.
+
+---
+
+<Accordion title="useCollection">
+
+`useCollection` manages an ordered, reactive list of entities backed by a ref-stable `Collection` instance. Mutations (`push`, `upsert`, `remove`, etc.) are async-safe — they wait for React listeners to attach before writing, which prevents lost updates in React 18 concurrent mode.
+
+```typescript
+useCollection<T extends { id: string | number }>(params?: {
+  initialValue?: T[] | (() => T[]) | Entity<T>[] | Collection<T>;
+  onChange?: (collection: CollectionAdapter<T>, target: CollectionEntityAdapter<T> | null) => void;
+  debounce?: number;  // default: CHANGE_DEBOUNCE (500 ms)
+}): CollectionAdapter<T>
+```
+
+**`CollectionAdapter<T>` API**
+
+| Member | Type | Description |
+|---|---|---|
+| `ids` | `(string \| number)[]` | IDs of all entities |
+| `lastIdx` | `number` | Index of the last entity |
+| `items` | `CollectionEntityAdapter<T>[]` | Entity adapters for all items |
+| `isEmpty` | `boolean` | `true` when the collection has no items |
+| `push(...items)` | `Promise<void>` | Append one or more items |
+| `upsert(...items)` | `Promise<void>` | Insert or update by `id` |
+| `remove(entity)` | `Promise<void>` | Remove by entity reference |
+| `removeById(id)` | `Promise<void>` | Remove by ID |
+| `removeAll()` | `Promise<void>` | Clear all items |
+| `setData(items)` | `Promise<void>` | Replace the entire collection |
+| `findById(id)` | `CollectionEntityAdapter<T>` | Look up a single entity |
+| `map / filter / find / some / forEach` | — | Standard array iteration |
+| `toArray()` | `T[]` | Snapshot as a plain array |
+| `refresh()` | `Promise<void>` | Force a re-render |
+
+<Tabs>
+  <Tab title="Hook usage">
+
+```tsx
+import { useCollection } from 'react-declarative';
+
+interface Counter {
+  id: string;
+  value: number;
+}
+
+const CounterList = () => {
+  const collection = useCollection<Counter>({
+    onChange: (collection, target) =>
+      console.log({ collection, target }),
+    initialValue: [],
+  });
+
+  const handleAdd = async () => {
+    const { id, ...data } = await fetchApi('/api/v1/counters/create', {
+      method: 'POST',
+    });
+    collection.push({ id, ...data });
+  };
+
+  const handleUpsert = async () => {
+    const updatedItems = await fetchApi('/api/v1/counters/list');
+    collection.upsert(updatedItems);
+  };
+
+  return (
+    <>
+      <button onClick={handleAdd}>Add item</button>
+      <button onClick={handleUpsert}>Upsert items</button>
+      <ul>
+        {collection.map((entity) => (
+          <ListItem key={entity.id} entity={entity} />
+        ))}
+      </ul>
+    </>
+  );
+};
+```
+
+  </Tab>
+  <Tab title="Class usage">
+
+```typescript
+import { Collection } from 'react-declarative';
+
+// Use outside React — in a service class, for example
+const counters = new Collection<Counter>([], 500, () => counters.items);
+
+counters.handleChange((updated, target) => {
+  console.log('Collection changed', updated.toArray());
+});
+
+await counters.push({ id: '1', value: 0 });
+await counters.upsert([{ id: '1', value: 42 }]);
+console.log(counters.findById('1').data); // { id: '1', value: 42 }
+```
+
+  </Tab>
+</Tabs>
+
+<Note>
+All mutating methods (`push`, `upsert`, `setData`, etc.) return `Promise<void>`. They wait internally until React has attached the change listener before writing, so it is safe to call them immediately after a component mounts.
+</Note>
+
+</Accordion>
+
+<Accordion title="useModel">
+
+`useModel` wraps a plain object in a reactive `Model` instance. Unlike `useCollection`, there is no list structure — `useModel` is for a single object (a form value, a settings record, a view-model state). Field-level reactivity is triggered by calling `setData` with a partial update.
+
+```typescript
+useModel<T extends {}>(params: {
+  initialValue: T | Model<T> | (() => T);
+  onChange?: (model: ModelAdapter<T>) => void;
+  debounce?: number;  // default: CHANGE_DEBOUNCE (500 ms)
+}): ModelAdapter<T>
+```
+
+**`ModelAdapter<T>` API**
+
+| Member | Type | Description |
+|---|---|---|
+| `data` | `T` | Current snapshot |
+| `setData(partial \| fn)` | `Promise<void>` | Merge a partial update or apply a function |
+| `refresh()` | `Promise<void>` | Force a re-render |
+| `toObject()` | `T` | Plain-object snapshot |
+| `toModel()` | `Model<T>` | Raw class instance |
+
+<Tabs>
+  <Tab title="Hook usage">
+
+```tsx
+import { useModel } from 'react-declarative';
+
+interface UserForm {
+  name: string;
+  email: string;
+}
+
+const UserEditor = () => {
+  const model = useModel<UserForm>({
+    initialValue: { name: '', email: '' },
+    onChange: (m) => console.log('form changed', m.toObject()),
+  });
+
+  return (
+    <form>
+      <input
+        value={model.data.name}
+        onChange={(e) => model.setData({ name: e.target.value })}
+      />
+      <input
+        value={model.data.email}
+        onChange={(e) => model.setData({ email: e.target.value })}
+      />
+    </form>
+  );
+};
+```
+
+  </Tab>
+  <Tab title="Class usage">
+
+```typescript
+import { Model } from 'react-declarative';
+
+const form = new Model<UserForm>({ name: '', email: '' });
+
+form.handleChange((updated) => {
+  console.log('Model updated', updated.toObject());
+});
+
+form.setData({ name: 'Alice' });
+form.setData((prev) => ({ email: prev.name + '@example.com' }));
+```
+
+  </Tab>
+</Tabs>
+
+</Accordion>
+
+<Accordion title="useEntity">
+
+`useEntity` is for a single reactive record that has an `id` field. It is the single-entity counterpart to `useCollection`. Use it when you need per-entity reactivity without the overhead of managing a list.
+
+```typescript
+useEntity<T extends { id: string | number }>(params: {
+  initialValue: T | Entity<T> | (() => T);
+  onChange?: (entity: EntityAdapter<T>) => void;
+  debounce?: number;  // default: CHANGE_DEBOUNCE (500 ms)
+}): EntityAdapter<T>
+```
+
+**`EntityAdapter<T>` API**
+
+| Member | Type | Description |
+|---|---|---|
+| `id` | `string \| number` | Entity identifier |
+| `data` | `T` | Current data snapshot |
+| `setData(partial \| fn)` | `Promise<void>` | Merge a partial update |
+| `refresh()` | `Promise<void>` | Force a re-render |
+| `toObject()` | `T` | Plain-object snapshot |
+| `toEntity()` | `Entity<T>` | Raw class instance |
+
+<Tabs>
+  <Tab title="Hook usage">
+
+```tsx
+import { useEntity } from 'react-declarative';
+
+interface Post {
+  id: string;
+  title: string;
+  published: boolean;
+}
+
+const PostEditor = ({ initialPost }: { initialPost: Post }) => {
+  const entity = useEntity<Post>({
+    initialValue: initialPost,
+    onChange: (e) => savePost(e.toObject()),
+  });
+
+  return (
+    <div>
+      <h2>{entity.data.title}</h2>
+      <button
+        onClick={() => entity.setData({ published: true })}
+      >
+        Publish
+      </button>
+    </div>
+  );
+};
+```
+
+  </Tab>
+  <Tab title="Class usage">
+
+```typescript
+import { Entity } from 'react-declarative';
+
+const post = new Entity<Post>({ id: '1', title: 'Hello', published: false });
+
+post.handleChange((updated) => {
+  console.log('Post changed', updated.toObject());
+});
+
+post.setData({ published: true });
+```
+
+  </Tab>
+</Tabs>
+
+</Accordion>
+
+<Accordion title="useListEditor">
+
+`useListEditor` implements the [Builder pattern](https://learn.microsoft.com/en-us/dotnet/api/system.text.stringbuilder) for dynamic lists. Instead of managing array state manually, you get `onAddItem`, `onUpdateItem`, and `onRemoveItem` helpers plus a `render()` function that iterates the list with stable row IDs.
+
+```typescript
+useListEditor<Data>(
+  renderItem: (id: number, item: Data) => React.ReactElement,
+  options: {
+    initialValue?: Data[];
+    onChange?: (items: Data[]) => void;
+  }
+): {
+  onAddItem: (data: Data) => number;      // returns the new row id
+  onUpdateItem: (id: number, data: Data) => void;
+  onRemoveItem: (id: number) => void;
+  items: Data[];                           // current items as a plain array
+  render: () => React.ReactElement;       // renders all rows via renderItem
+}
+```
+
+**Behaviour**
+
+- Row IDs are monotonically increasing integers (not array indices), so removing an item never shifts other IDs.
+- `onChange` is called after every add, update, or remove — but not on the initial render.
+- The `render()` function is stable; call it anywhere in your JSX.
+
+```tsx
+import { useListEditor } from 'react-declarative';
+
+interface PhoneEntry {
+  number: string;
+  label: string;
+}
+
+const PhoneList = ({ onChange }: { onChange: (phones: PhoneEntry[]) => void }) => {
+  const { onAddItem, onRemoveItem, render } = useListEditor<PhoneEntry>(
+    (id, item) => (
+      <div key={id} style={{ display: 'flex', gap: 8 }}>
+        <span>{item.label}: {item.number}</span>
+        <button onClick={() => onRemoveItem(id)}>Remove</button>
+      </div>
+    ),
+    {
+      initialValue: [],
+      onChange,
+    }
+  );
+
+  return (
+    <div>
+      <button onClick={() => onAddItem({ number: '', label: 'Mobile' })}>
+        Add phone
+      </button>
+      {render()}
+    </div>
+  );
+};
+```
+
+</Accordion>
+
+---
+
+## Pattern summary
+
+```
+useCollection  →  Collection<T>  →  many entities, list operations
+useEntity      →  Entity<T>      →  one entity, field-level reactivity
+useModel       →  Model<T>       →  one plain object, no id required
+useListEditor  →  (no class)     →  builder pattern, stable row IDs
+```
+
+<Tip>
+All three class-backed hooks (`useCollection`, `useEntity`, `useModel`) accept a `debounce` parameter. The default is `CHANGE_DEBOUNCE` (500 ms), which batches rapid successive mutations into a single React re-render. Set `debounce: 0` for immediate updates.
+</Tip>

@@ -1,0 +1,338 @@
+---
+title: 'One Component API Reference — react-declarative'
+description: 'Complete props reference for the One and OneTyped components, covering handlers, field schemas, callbacks, layout options, and the typed generic variant.'
+keywords: ['One', 'OneTyped', 'form', 'react-declarative', 'IOnePublicProps']
+---
+
+The `<One />` component is the primary form-rendering engine in react-declarative. It accepts a declarative field schema and a data handler, then renders and manages a fully controlled form — including validation, async data loading, layout composition, and feature-gating. `<OneTyped />` is the generic-typed variant that narrows prop types based on your data model.
+
+## Import
+
+```tsx
+import { One, OneTyped } from 'react-declarative';
+```
+
+## Basic usage
+
+<CodeGroup>
+
+```tsx Minimal form
+import { One, FieldType } from 'react-declarative';
+
+const fields = [
+  { type: FieldType.Text, name: 'firstName', title: 'First name' },
+  { type: FieldType.Text, name: 'lastName',  title: 'Last name'  },
+];
+
+export default function MyForm() {
+  return (
+    <One
+      fields={fields}
+      handler={() => ({ firstName: '', lastName: '' })}
+      onChange={(data) => console.log(data)}
+    />
+  );
+}
+```
+
+```tsx Async handler with payload
+import { One, FieldType } from 'react-declarative';
+
+const fields = [
+  { type: FieldType.Text, name: 'email', title: 'Email' },
+];
+
+export default function ProfileForm({ userId }: { userId: string }) {
+  return (
+    <One
+      fields={fields}
+      payload={{ userId }}
+      handler={async ({ userId }) => {
+        const res = await fetch(`/api/users/${userId}`);
+        return res.json();
+      }}
+      onChange={(data, initial) => {
+        if (!initial) saveProfile(data);
+      }}
+      fallback={(e) => console.error('Load failed', e)}
+    />
+  );
+}
+```
+
+</CodeGroup>
+
+## OneTyped generic variant
+
+`OneTyped<Data, Payload>` narrows all callback signatures and the `handler` return type to your data model. Prefer this form whenever the data shape is known at compile time.
+
+```tsx
+import { OneTyped, FieldType, TypedField } from 'react-declarative';
+
+interface UserData {
+  name: string;
+  email: string;
+  age: number;
+}
+
+const fields: TypedField<UserData>[] = [
+  { type: FieldType.Text, name: 'name',  title: 'Full name' },
+  { type: FieldType.Text, name: 'email', title: 'Email' },
+  { type: FieldType.Text, name: 'age',   title: 'Age', inputType: 'number' },
+];
+
+export default function UserForm({ id }: { id: string }) {
+  return (
+    <OneTyped<UserData>
+      fields={fields}
+      handler={async () => fetchUser(id)}
+      onChange={(data: UserData, initial: boolean) => {
+        if (!initial) updateUser(id, data);
+      }}
+    />
+  );
+}
+```
+
+<Tip>
+  Use `OneTyped` rather than `One` in TypeScript projects. It gives you full
+  IntelliSense on `handler`, `onChange`, `isInvalid`, and every other callback.
+</Tip>
+
+## Props reference
+
+### Data & loading
+
+<ParamField path="fields" type="TypedField[]" required>
+  The declarative field schema array that describes what the form renders. Each
+  entry is a `TypedField` object with at minimum a `type` and, for input fields,
+  a `name`. See the [TypedField reference](/api/typed-field) for the full
+  per-type props.
+</ParamField>
+
+<ParamField path="handler" type="OneHandler<Data, Payload>">
+  Primary data source. Accepts a plain data object, a synchronous function, or
+  an async function returning the data object (or `null`). When `handler` is a
+  function it receives the current `payload` value as its first argument.
+
+  ```typescript
+  type OneHandler<Data, Payload> =
+    | Data
+    | ((payload: Payload) => Data | null)
+    | ((payload: Payload) => Promise<Data | null>)
+    | null;
+  ```
+</ParamField>
+
+<ParamField path="data" type="Data | null">
+  Alternative to `handler` for passing data directly as a React-controlled prop.
+  Useful when you manage form state externally and want a familiar controlled
+  component pattern.
+</ParamField>
+
+<ParamField path="payload" type="Payload | (() => Payload)">
+  Arbitrary value passed through to every field callback (`isInvalid`,
+  `isVisible`, `isDisabled`, `compute`, etc.) and to `handler`. Use it to
+  supply contextual data such as the current user ID or feature flags without
+  prop-drilling through the field schema.
+</ParamField>
+
+<ParamField path="features" type="Record<string, Value> | string[] | (() => string[] | Record<string, Value>)">
+  Feature flags used to conditionally show or hide fields that declare a
+  `features` list. A field is rendered only when all of its required features
+  are present in this set. Accepts a string array, a record of feature names to
+  values, or a factory function returning either form.
+</ParamField>
+
+<ParamField path="readTransform" type="(value: string | string[], name: string, data: Data, payload: Payload) => Value">
+  Transforms a field value **after** it is read from the data object and before
+  it is passed to the field component. Useful for deserialising stored formats,
+  e.g. converting an ISO date string to a display string.
+</ParamField>
+
+<ParamField path="writeTransform" type="(value: string | string[], name: string, data: Data, payload: Payload) => Value">
+  Transforms a field value **before** it is written back to the data object on
+  change. Useful for serialising values, e.g. normalising phone numbers.
+</ParamField>
+
+<ParamField path="incomingTransform" type="(data: IAnything, payload: Payload) => Data">
+  Transforms the entire data object received from `handler` before it is used
+  internally. Use this to deserialise the raw API payload to the shape your
+  fields expect.
+</ParamField>
+
+<ParamField path="outgoingTransform" type="(data: IAnything, payload: Payload) => Data">
+  Transforms the entire data object before it is emitted through `onChange`.
+  Use this to re-serialise the form state to a format suitable for the API.
+</ParamField>
+
+### Callbacks
+
+<ParamField path="onChange" type="(data: Data, initial: boolean) => void">
+  Called every time any field value changes. `initial` is `true` for the
+  synthetic change event fired when data is first loaded; use this flag to
+  distinguish user edits from the initial population.
+</ParamField>
+
+<ParamField path="fallback" type="(e: Error) => void">
+  Error boundary callback invoked when `handler` throws or rejects. Use it to
+  display a toast, log the error, or fall back to an empty state.
+</ParamField>
+
+<ParamField path="onFocus" type="(name: string, data: Data, payload: Payload, onValueChange: (value: Value) => void, onChange: (data: Data) => void) => void">
+  Called when a field receives focus. Receives the field `name`, the current
+  `data` snapshot, the `payload`, and imperative helpers for updating the field
+  value or the entire data object.
+</ParamField>
+
+<ParamField path="onBlur" type="(name: string, data: Data, payload: Payload, onValueChange: (value: Value) => void, onChange: (data: Data) => void) => void">
+  Called when a field loses focus. Same signature as `onFocus`.
+</ParamField>
+
+<ParamField path="onClick" type="(name: string, data: Data, payload: Payload, onValueChange: (value: Value) => void, onChange: (data: Data) => void, e: React.MouseEvent) => void | Promise<void>">
+  Intercepts clicks on a field. Useful in read-only card views where clicking
+  a field should copy its value or open a detail modal.
+</ParamField>
+
+<ParamField path="onMenu" type="(name: string, action: string, data: Data, payload: Payload, onValueChange: (value: Value) => void, onChange: (data: Data) => void) => void">
+  Called when the user selects an item from a field's context menu (configured
+  via `menuItems` on the field). `action` is the menu item's action string.
+</ParamField>
+
+<ParamField path="onInvalid" type="(name: string, msg: string, payload: Payload) => void">
+  Called whenever a field fails validation. Receives the field `name` and the
+  validation error message. Useful for aggregating form-level error state.
+</ParamField>
+
+<ParamField path="onReady" type="() => void">
+  Called once after all fields have rendered for the first time. Use this to
+  fire analytics events or set focus on the first field.
+</ParamField>
+
+<ParamField path="onLoadStart" type="(source: string) => void">
+  Called when an async `handler` begins loading. `source` identifies which
+  internal process triggered the load.
+</ParamField>
+
+<ParamField path="onLoadEnd" type="(isOk: boolean, source: string) => void">
+  Called when an async load completes. `isOk` is `false` if the load failed
+  (in which case `fallback` has also been called).
+</ParamField>
+
+### Layout & appearance
+
+<ParamField path="readonly" type="boolean" default="false">
+  Makes every input field read-only when `true`. Individual fields can still
+  override this via their own `readonly` or `isReadonly` props.
+</ParamField>
+
+<ParamField path="disabled" type="boolean" default="false">
+  Disables every input field. Like `readonly`, individual fields can override.
+</ParamField>
+
+<ParamField path="prefix" type="string">
+  String prepended to the internal React `key` generated for each field.
+  Necessary when you render multiple `<One />` instances with the same schema
+  on the same page, to avoid key collisions.
+</ParamField>
+
+<ParamField path="baseline" type="boolean">
+  Aligns all fields to the bottom baseline of the form row.
+</ParamField>
+
+<ParamField path="noBaseline" type="boolean">
+  Aligns fields and layouts to the top edge, overriding the default bottom
+  alignment.
+</ParamField>
+
+<ParamField path="isBaseline" type="(field: IField) => boolean">
+  Per-field baseline decision callback. Return `true` for fields that should
+  align to the bottom baseline. This is called for each field in the hierarchy.
+</ParamField>
+
+<ParamField path="isBaselineForRoot" type="(field: IField) => boolean">
+  Like `isBaseline` but applied at the root layout level. The root component
+  enables bottom alignment only when no layout containers are present.
+</ParamField>
+
+<ParamField path="outlinePaper" type="boolean" default="false">
+  Converts any `FieldType.Paper` layout into `FieldType.Outline`, giving it a
+  bordered card appearance.
+</ParamField>
+
+<ParamField path="transparentPaper" type="boolean" default="false">
+  Removes the background and elevation from `FieldType.Paper` layouts.
+</ParamField>
+
+<ParamField path="dirty" type="boolean" default="false">
+  When `true`, validation errors are shown immediately without requiring the
+  user to focus a field first.
+</ParamField>
+
+<ParamField path="className" type="string">
+  CSS class name applied to the root group element.
+</ParamField>
+
+<ParamField path="style" type="React.CSSProperties">
+  Inline styles applied to the root group element.
+</ParamField>
+
+<ParamField path="sx" type="SxProps">
+  MUI system `sx` prop applied to the root group element. Supports responsive
+  breakpoints and theme tokens.
+</ParamField>
+
+### Reactive subjects
+
+<ParamField path="reloadSubject" type="TSubject<void>">
+  RxJS-style subject that triggers a full data reload from `handler` when it
+  emits. Use this for external "refresh" buttons.
+</ParamField>
+
+<ParamField path="changeSubject" type="TSubject<Data>">
+  Subject that pushes a new data object into the form, treating the update as
+  an initial load (`initial = true` in `onChange`).
+</ParamField>
+
+<ParamField path="updateSubject" type="TSubject<Data>">
+  Subject that pushes a new data object into the form as a user-initiated
+  change (`initial = false` in `onChange`).
+</ParamField>
+
+### Advanced
+
+<ParamField path="apiRef" type="React.Ref<IOneApi>">
+  Ref that receives an imperative API handle. The `IOneApi` interface exposes
+  methods for programmatically reading form data, triggering validation, and
+  resetting state.
+</ParamField>
+
+<ParamField path="context" type="Record<string, any>">
+  Extra contextual data passed to custom field components via context. Unlike
+  `payload`, changes to `context` trigger change detection.
+</ParamField>
+
+<ParamField path="fieldDebounce" type="number">
+  Debounce delay in milliseconds applied to `FieldType.Text` change events.
+  Reduces the frequency of `onChange` calls during fast typing.
+</ParamField>
+
+<ParamField path="withNamedPlaceholders" type="boolean" default="false">
+  Generates placeholder text for each field automatically from the field `name`.
+  Useful during prototyping.
+</ParamField>
+
+<ParamField path="slots" type="Partial<ISlotFactoryContext>">
+  Slot overrides that replace the default rendering of individual field types
+  with custom components. See the slot factory documentation for the full list
+  of replaceable slots.
+</ParamField>
+
+<ParamField path="createField" type="(entity: IEntity<Data>, currentPath: string) => React.ReactElement">
+  Custom factory function for rendering fields. Return a React element to
+  replace the default field renderer for any matching entity.
+</ParamField>
+
+<ParamField path="createLayout" type="(entity: IEntity<Data>, children: React.ReactNode, currentPath: string) => React.ReactElement">
+  Custom factory function for rendering layout containers (Group, Paper, etc.).
+</ParamField>

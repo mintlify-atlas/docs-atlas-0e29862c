@@ -1,0 +1,153 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "react-declarative",
+  "projectDescription": "A TypeScript React library for building JSON-driven forms, data grids, and full application UIs using declarative field schemas with MUI components and automatic state management.",
+  "theme": "palm",
+  "primaryColor": "#1976d2",
+  "lightColor": "#42a5f5",
+  "darkColor": "#0d47a1",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Form Engine",
+            "pages": [
+              "form-engine/overview",
+              "form-engine/field-types",
+              "form-engine/layouts",
+              "form-engine/validation",
+              "form-engine/state-management"
+            ]
+          },
+          {
+            "group": "View Components",
+            "pages": [
+              "components/list",
+              "components/scaffold",
+              "components/kanban",
+              "components/wizard",
+              "components/other-views"
+            ]
+          },
+          {
+            "group": "Hooks & Utilities",
+            "pages": [
+              "hooks/async-hooks",
+              "hooks/mvvm",
+              "hooks/reactive",
+              "hooks/routing"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/slot-factory",
+              "advanced/dependency-injection",
+              "advanced/ai-integration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core",
+            "pages": [
+              "api/one",
+              "api/list",
+              "api/field-types",
+              "api/typed-field"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "api/view-components",
+              "api/action-components"
+            ]
+          },
+          {
+            "group": "Hooks",
+            "pages": [
+              "api/hooks-reference",
+              "api/utilities"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "JSON/TypeScript-typed declarative field schema for building forms and layouts",
+    "Automatic form state management with onChange, handler, and defaultValue",
+    "Responsive 12-column grid system with phone/tablet/desktop breakpoints",
+    "Built-in form validation with isInvalid, isDisabled, and isVisible callbacks",
+    "Rich field types: Text, Combo, Items, Rating, Date, Slider, Tree, Dict, and more",
+    "Layout types: Group, Paper, Expansion, Tabs, Hero, Outline, Condition",
+    "ListTyped data grid with filters, pagination, sorting, chips, and row actions",
+    "Scaffold2/3 for full Material Design app shell with sidebar navigation",
+    "KanbanView for drag-and-drop board management",
+    "WizardView for multi-step workflows with routing",
+    "OneSlotFactory for custom UI-kit overrides without changing schemas",
+    "Async hooks: useAsyncValue, useSinglerunAction, useQueuedAction, useAsyncProgress",
+    "MVVM patterns: useCollection, useModel, useEntity",
+    "Reactive programming: Subject, BehaviorSubject, EventEmitter, Source (MapReduce)",
+    "Built-in router with guards, prefetch, unload, and redirect support",
+    "Dependency injection: provide, inject, createServiceManager"
+  ],
+  "publicApiSurface": [
+    "One",
+    "OneTyped",
+    "List",
+    "ListTyped",
+    "Scaffold2",
+    "Scaffold3",
+    "KanbanView",
+    "WizardView",
+    "VisibilityView",
+    "FeatureView",
+    "OneSlotFactory",
+    "FieldType",
+    "TypedField",
+    "IField",
+    "useAsyncValue",
+    "useSinglerunAction",
+    "useQueuedAction",
+    "useAsyncProgress",
+    "usePreventAction",
+    "useCollection",
+    "useModel",
+    "useEntity",
+    "useSubject",
+    "useBehaviorSubject",
+    "Subject",
+    "BehaviorSubject",
+    "Source",
+    "Switch",
+    "OutletView",
+    "ActionButton",
+    "ActionIcon",
+    "ActionModal",
+    "FetchView",
+    "Async",
+    "If",
+    "VirtualView",
+    "InfiniteView",
+    "provide",
+    "inject",
+    "createServiceManager",
+    "getAvailableFields",
+    "fetchApi"
+  ]
+}

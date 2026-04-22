@@ -1,0 +1,428 @@
+---
+title: "Async Hooks & Action Utilities in react-declarative"
+description: "Async hooks in react-declarative: eliminate duplicate requests, queue calls, track batch progress, and block navigation while operations are pending."
+---
+
+react-declarative ships a collection of async-focused hooks built on top of a cancelable promise model. This page covers every async action hook — their TypeScript signatures, the options they accept, and real-world usage patterns drawn directly from the library source and README.
+
+## Overview
+
+| Hook | Purpose |
+|---|---|
+| `useAsyncAction` | Base cancelable async action with `loading`/`error` state |
+| `useAsyncValue` | Fetch remote data on mount and expose a setter |
+| `useSinglerunAction` | Ignore calls while a previous execution is still pending |
+| `useQueuedAction` | Serialize calls so they execute strictly in order |
+| `useAsyncProgress` | Drive a 0–100 % progress bar over a batch of items |
+| `usePreventAction` | Semaphore that disables sibling actions while one is running |
+| `usePreventNavigate` | Block router navigation while an action is in-flight |
+
+---
+
+<Accordion title="useAsyncAction">
+
+`useAsyncAction` is the base hook used internally by all other async hooks. It wraps your callback in a `cancelable` higher-order function so that re-executions cancel any previous in-flight call.
+
+```typescript
+useAsyncAction<Data, Payload>(
+  run: (payload: Payload) => Data | Promise<Data>,
+  options?: {
+    onLoadStart?: () => void;
+    onLoadEnd?: (isOk: boolean) => void;
+    fallback?: (e: Error) => void;
+    throwError?: boolean;
+  }
+): {
+  loading: boolean;
+  error: boolean;
+  execute: (payload?: Payload) => Promise<Data | null>;
+}
+```
+
+**Behaviour**
+
+- Each call to `execute` cancels any unresolved previous call via `CANCELED_SYMBOL`.
+- `loading` is `true` from the moment `execute` is called until the promise settles.
+- Errors are swallowed and forwarded to `fallback` unless `throwError: true`.
+- The hook is safe to call after unmount — it holds an `isMounted` guard.
+
+```tsx
+import { useAsyncAction } from 'react-declarative';
+
+const { execute, loading, error } = useAsyncAction(async (id: string) => {
+  return await fetchUser(id);
+});
+
+return (
+  <button disabled={loading} onClick={() => execute(userId)}>
+    {loading ? 'Loading…' : 'Fetch user'}
+  </button>
+);
+```
+
+</Accordion>
+
+<Accordion title="useAsyncValue">
+
+`useAsyncValue` fetches data automatically on mount (and whenever `deps` change) and returns a tuple of `[data, actionResult, setData, extras]`.
+
+```typescript
+useAsyncValue<Data>(
+  run: () => Data | Promise<Data>,
+  params?: {
+    fallback?: (e: Error) => void;
+    onLoadStart?: () => void;
+    onLoadEnd?: (isOk: boolean) => void;
+    throwError?: boolean;
+    deps?: any[];
+  }
+): [
+  Data | null,
+  IResult<void, void>,
+  (data: Data) => void,
+  { waitForResult: () => Promise<Data>; data$: MutableRefObject<Data | null> }
+]
+```
+
+**Behaviour**
+
+- Calls `run()` immediately on mount; re-runs whenever the optional `deps` array changes.
+- The third element, `setData`, lets you optimistically update the cached value after a mutation without a full re-fetch.
+- `waitForResult()` polls until data is non-null — useful for imperative code that must wait for the first load.
+
+```tsx
+import { useAsyncValue } from 'react-declarative';
+
+const [data, { loading, error }, setData] = useAsyncValue(async () => {
+  return await getData();
+});
+
+if (loading || error) {
+  return null;
+}
+
+return (
+  <pre>
+    {JSON.stringify(data, null, 2)}
+  </pre>
+);
+
+// Optimistic update after a mutation
+const handleChangeData = async () => {
+  const newData = await fetchApi('/api/v1/data', {
+    method: 'POST',
+  });
+  setData(newData);
+};
+```
+
+<Note>
+`useAsyncValue` honours the `rules-of-hooks` lint rule because the async call lives inside `useEffect`, not at the top level of the component.
+</Note>
+
+</Accordion>
+
+<Accordion title="useSinglerunAction">
+
+`useSinglerunAction` wraps your callback with the `singlerun` higher-order function. While a call is already executing, subsequent `execute()` calls return immediately without starting a new execution.
+
+```typescript
+useSinglerunAction<Data, Payload>(
+  run: (payload: Payload) => Data | Promise<Data>,
+  options?: {
+    onLoadStart?: () => void;
+    onLoadEnd?: (isOk: boolean) => void;
+    fallback?: (e: Error) => void;
+    throwError?: boolean;
+  }
+): {
+  loading: boolean;
+  error: boolean;
+  execute: {
+    (payload?: Payload): Promise<Data | null>;
+    clear(): void;  // reset the singlerun guard
+  };
+}
+```
+
+**Behaviour**
+
+- The `singlerun` guard is shared across all calls to `execute` for the lifetime of the component.
+- Call `execute.clear()` to reset the guard if you need to allow a re-run immediately after a cancellation.
+- Ideal for file-upload buttons where double-clicking must not trigger two uploads.
+
+```tsx
+import { useSinglerunAction } from 'react-declarative';
+import { ActionIcon } from 'react-declarative';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+
+const { execute } = useSinglerunAction(
+  async () => {
+    const file = await chooseFile('image/jpeg, image/png');
+    if (file) {
+      const filePath = await ioc.appwriteService.uploadFile(file);
+      onChange(filePath);
+    }
+  }
+);
+
+return (
+  <ActionIcon onClick={execute}>
+    <CloudUploadIcon />
+  </ActionIcon>
+);
+```
+
+</Accordion>
+
+<Accordion title="useQueuedAction">
+
+`useQueuedAction` wraps your callback with the `queued` higher-order function. Every call to `execute()` is placed in a FIFO queue and runs after the previous call resolves, preserving execution order.
+
+```typescript
+useQueuedAction<Data, Payload>(
+  run: (payload: Payload) => Data | Promise<Data>,
+  options?: {
+    onLoadStart?: () => void;
+    onLoadEnd?: (isOk: boolean) => void;
+    fallback?: (e: Error) => void;
+    throwError?: boolean;
+  }
+): {
+  loading: boolean;
+  error: boolean;
+  execute: {
+    (payload?: Payload): Promise<Data | null>;
+    clear(): void;   // drain the queue
+    cancel(): void;  // cancel the currently executing item
+  };
+}
+```
+
+**Behaviour**
+
+- Calls are serialised in the order they arrive — no re-ordering, no skipping.
+- Returns `CANCELED_SYMBOL` (re-exported as `CANCELED_SYMBOL`) when `cancel()` is called mid-flight.
+- Excellent for WebSocket/realtime event handlers where state reducer actions must be applied in sequence.
+
+```tsx
+import { useQueuedAction } from 'react-declarative';
+import { useEffect } from 'react';
+
+const { execute } = useQueuedAction(
+  async ({ type, payload }) => {
+    if (type === 'create-action') {
+      // handle create
+    }
+    if (type === 'update-action') {
+      // handle update
+    }
+    if (type === 'remove-action') {
+      // handle remove
+    }
+  },
+  {
+    onLoadStart: () => ioc.layoutService.setAppbarLoader(true),
+    onLoadEnd:   () => ioc.layoutService.setAppbarLoader(false),
+  }
+);
+
+useEffect(() => ioc.kanbanService.createSubject.subscribe(execute), []);
+useEffect(() => ioc.kanbanService.updateSubject.subscribe(execute), []);
+useEffect(() => ioc.kanbanService.removeSubject.subscribe(execute), []);
+```
+
+</Accordion>
+
+<Accordion title="useAsyncProgress">
+
+`useAsyncProgress` iterates over an array of labelled work items, calls your `process` function for each one, and maintains a `0–100` percent progress value along with any per-item errors.
+
+```typescript
+useAsyncProgress<Data, Result>(
+  process: (item: { label: string; data: Data }) => Result | Promise<Result>,
+  options?: {
+    delay?: number;
+    onBegin?: () => void;
+    onEnd?: (isOk: boolean) => void;
+    onFinish?: (data: Data[], errors: IError[], result: (Result | null)[]) => void;
+    onError?: (errors: IError[]) => void | boolean;  // return false to stop on first error
+    onProgress?: (progress: number) => void;
+    onLoadStart?: () => void;
+    onLoadEnd?: (isOk: boolean) => void;
+  }
+): {
+  execute: (items: { label: string; data: Data }[]) => void;
+  loading: boolean;
+  label: string;   // label of the currently processing item
+  progress: number;
+  errors: IError[];
+}
+```
+
+**Behaviour**
+
+- `execute` accepts an array; items are processed sequentially with optional `delay` ms between each.
+- `onError` receives the full accumulated error list. Return `false` to abort early.
+- The hook is built on `useSinglerunAction`, so calling `execute` again while running is a no-op.
+
+```tsx
+import { useAsyncProgress } from 'react-declarative';
+import { ActionButton } from 'react-declarative';
+
+const { execute } = useAsyncProgress(
+  async ({ data }) => {
+    await createContact(data);
+  },
+  {
+    onProgress: (percent) => {
+      setProgress(percent);
+    },
+    onError: (errors) => {
+      setErrors(errors);
+    },
+    onEnd: (isOk) => {
+      history.replace('/report');
+    },
+  }
+);
+
+return (
+  <ActionButton
+    onClick={async () => {
+      const file = await chooseFile(
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      if (file) {
+        const rows = await parseExcelContacts(file);
+        execute(
+          rows.map((row, idx) => ({
+            data: row,
+            label: `Row №${idx + 2}`,
+          }))
+        );
+      }
+    }}
+  >
+    Choose XLSX
+  </ActionButton>
+);
+```
+
+</Accordion>
+
+<Accordion title="usePreventAction">
+
+`usePreventAction` implements a semaphore counter. Pass `handleLoadStart` / `handleLoadEnd` to any number of `ActionButton` or `ActionIcon` components, and all of them will be disabled while at least one is loading.
+
+```typescript
+usePreventAction(options?: {
+  disabled?: boolean;
+  onLoadStart?: () => void;
+  onLoadEnd?: (isOk: boolean) => void;
+}): {
+  handleLoadStart: () => void;
+  handleLoadEnd: (isOk: boolean) => void;
+  loading: boolean;  // true when counter > 0, or when disabled prop is true
+}
+```
+
+**Behaviour**
+
+- Internally keeps a numeric counter; `handleLoadStart` increments it, `handleLoadEnd` decrements it.
+- `loading` becomes `true` the moment any registered action starts and returns to `false` only when all actions have finished.
+
+```tsx
+import { usePreventAction } from 'react-declarative';
+import { ActionButton } from 'react-declarative';
+
+const {
+  handleLoadStart,
+  handleLoadEnd,
+  loading,
+} = usePreventAction();
+
+return (
+  <>
+    <ActionButton
+      disabled={loading}
+      onLoadStart={handleLoadStart}
+      onLoadEnd={handleLoadEnd}
+    >
+      Action 1
+    </ActionButton>
+
+    <ActionButton
+      disabled={loading}
+      onLoadStart={handleLoadStart}
+      onLoadEnd={handleLoadEnd}
+    >
+      Action 2
+    </ActionButton>
+  </>
+);
+```
+
+</Accordion>
+
+<Accordion title="usePreventNavigate">
+
+`usePreventNavigate` blocks the router history while an action is in-flight, preventing the user from navigating away mid-operation. Optionally shows a confirmation dialog before letting the navigation proceed.
+
+```typescript
+usePreventNavigate(params: {
+  history: MemoryHistory | BrowserHistory | HashHistory;
+  withConfirm?: boolean;   // default false — show "Continue?" dialog
+  onLoadStart?: () => void;
+  onLoadEnd?: (isOk: boolean) => void;
+}): {
+  handleLoadStart: () => void;
+  handleLoadEnd: (isOk: boolean) => void;
+  loading: boolean;
+  block: () => void;    // re-enable the blocker after unblock()
+  unblock: () => void;  // programmatically lift the block
+}
+```
+
+**Behaviour**
+
+- Registers both a `history.block` listener and a `beforeunload` handler while `loading` is truthy.
+- When `withConfirm` is `true`, a "The form contains unsaved changes. Continue?" dialog is shown before any navigation proceeds.
+- Call `unblock()` programmatically (e.g., after a successful save) to let navigation through without waiting for the action to end.
+
+```tsx
+import { usePreventNavigate } from 'react-declarative';
+import { ActionButton } from 'react-declarative';
+
+const { handleLoadStart, handleLoadEnd } = usePreventNavigate({
+  history: ioc.routerService,
+});
+
+return (
+  <ActionButton
+    onLoadStart={handleLoadStart}
+    onLoadEnd={handleLoadEnd}
+  >
+    Action
+  </ActionButton>
+);
+```
+
+<Tip>
+Pass `withConfirm: true` on forms that have unsaved user input to give users a chance to cancel the navigation instead of silently dropping their changes.
+</Tip>
+
+</Accordion>
+
+---
+
+## Common options
+
+All hooks except `usePreventAction` accept these lifecycle callbacks:
+
+| Option | Type | Description |
+|---|---|---|
+| `onLoadStart` | `() => void` | Called when execution begins |
+| `onLoadEnd` | `(isOk: boolean) => void` | Called when execution ends; `isOk` is `false` if an error was thrown |
+| `fallback` | `(e: Error) => void` | Error handler — used when `throwError` is `false` (default) |
+| `throwError` | `boolean` | Rethrow errors to an `ErrorBoundary` instead of calling `fallback` |

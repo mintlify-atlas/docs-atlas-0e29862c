@@ -1,0 +1,597 @@
+---
+title: "Utilities & HOF Reference — react-declarative"
+description: "Every utility exported by react-declarative: HOF wrappers, reactive primitives, fetch helpers, storage managers, URL routing utilities, and math combinators."
+---
+
+react-declarative ships a rich set of standalone utility functions alongside its React components and hooks. These cover higher-order function wrappers (monadic patterns), reactive programming primitives, HTTP fetch helpers, local/session storage managers, URL routing utilities, and functional combinators. This page documents every exported utility with its signature and a concise description.
+
+## Higher-Order Functions
+
+These utilities wrap async or sync functions to add scheduling, caching, error-safety, and concurrency control. They follow the patterns listed in the library's README (Monad, Coroutine, Scheduled-task).
+
+<AccordionGroup>
+
+<Accordion title="singleshot — run once and memoize">
+
+```typescript
+singleshot<T extends (...args: any[]) => any>(
+  run: T
+): T & { clear(): void }
+```
+
+Executes `run` on the first call and returns the cached result on all subsequent calls. Calling `.clear()` resets the memo so the function can run again.
+
+```typescript
+import { singleshot } from 'react-declarative';
+
+const loadConfig = singleshot(async () => {
+  return await fetch('/api/config').then(r => r.json());
+});
+
+await loadConfig(); // fetches
+await loadConfig(); // returns cached result
+loadConfig.clear(); // reset — next call will fetch again
+```
+
+</Accordion>
+
+<Accordion title="singlerun — prevent concurrent execution">
+
+```typescript
+singlerun<T extends (...args: any[]) => any>(
+  run: T
+): T & { clear(): void; getStatus(): 'pending' | 'fulfilled' | 'rejected' | 'ready' }
+```
+
+Wraps an async function so that if it is already in flight, subsequent calls return the same in-flight `Promise` rather than starting a new execution. Once the promise settles, the next call runs the function fresh.
+
+`getStatus()` returns `"pending"` while running, `"fulfilled"` / `"rejected"` after settling, or `"ready"` before the first call or after `.clear()`.
+
+```typescript
+import { singlerun } from 'react-declarative';
+
+const sync = singlerun(async () => {
+  await heavyOperation();
+});
+
+sync(); // starts
+sync(); // same promise
+```
+
+The exported `Task` class holds a `target: Promise<any>` and a `status` getter — it is what `singlerun` uses internally to track execution.
+
+</Accordion>
+
+<Accordion title="cancelable — cancellable promise wrapper">
+
+```typescript
+cancelable<T, P extends any[]>(
+  promise: (...args: P) => Promise<T>
+): IWrappedFn<T, P> & { cancel(): void }
+
+// CANCELED_PROMISE_SYMBOL — returned instead of T when cancelled
+```
+
+Wraps a promise-returning function so that any prior pending call is cancelled when the wrapper is invoked again. A cancelled call resolves with `CANCELED_PROMISE_SYMBOL` rather than the actual value.
+
+```typescript
+import { cancelable, CANCELED_PROMISE_SYMBOL } from 'react-declarative';
+
+const search = cancelable(async (query: string) => {
+  return await fetchResults(query);
+});
+
+const result = await search('react');
+if (result === CANCELED_PROMISE_SYMBOL) {
+  // this call was superseded
+}
+```
+
+</Accordion>
+
+<Accordion title="debounce — trailing-edge debounce">
+
+```typescript
+debounce<T extends (...args: any[]) => any>(
+  run: T,
+  delay?: number  // default 1000ms
+): T & { clear(): void; flush(): void; pending(): boolean }
+```
+
+Returns a debounced version of `run`. When `delay` is `0` the function is deferred to the next animation frame. `flush()` executes the pending call immediately; `pending()` returns `true` if a call is queued.
+
+</Accordion>
+
+<Accordion title="queued — sequential FIFO execution">
+
+```typescript
+queued<T, P extends any[]>(
+  promise: (...args: P) => Promise<T>
+): IWrappedFn<T, P> & { clear(): void; cancel(): void }
+```
+
+Ensures that all calls execute sequentially in FIFO order, waiting for each to complete before starting the next. `cancel()` discards any pending calls; `clear()` resets the queue.
+
+</Accordion>
+
+<Accordion title="cached — args-change cache">
+
+```typescript
+cached<T extends (...args: A) => any, A extends any[]>(
+  changed: (prevArgs: A, currentArgs: A) => boolean,
+  run: T
+): T & { clear(): void }
+```
+
+Caches the last return value and only re-invokes `run` when `changed(prevArgs, currentArgs)` returns `true`. Useful for expensive computations that depend on a specific argument fingerprint.
+
+</Accordion>
+
+<Accordion title="memoize — key-based memoization">
+
+```typescript
+memoize<T extends (...args: A) => any, A extends any[], K = string>(
+  key: (args: A) => K,
+  run: T
+): T & { clear(key?: K): void; add(key: K, value: ReturnType<T>): void; remove(key: K): void }
+```
+
+Memoizes `run` using a `key` function that maps arguments to a cache key. `clear(key?)` evicts one key or the whole cache.
+
+</Accordion>
+
+<Accordion title="ttl — time-to-live cache">
+
+```typescript
+ttl<T extends (...args: A) => any, A extends any[], K = string>(
+  run: T,
+  options?: {
+    key?: (args: A) => K;
+    timeout?: number;  // default 250ms
+  }
+): T & { clear(key?: K): void; gc(): void }
+```
+
+Memoizes results and automatically invalidates entries older than `timeout` milliseconds. `gc()` manually evicts all expired entries.
+
+</Accordion>
+
+<Accordion title="lock — mutex for async functions">
+
+```typescript
+lock<T, P extends any[]>(
+  promise: (...args: P) => Promise<T>
+): IWrappedFn<T, P> & {
+  beginLock(): void;
+  endLock(): Promise<void>;
+}
+```
+
+Wraps a function with a mutual-exclusion lock. While a lock is held via `beginLock()`, calls are queued until `endLock()` is called. The queue uses `queued` semantics internally.
+
+</Accordion>
+
+<Accordion title="retry — automatic retry with back-off">
+
+```typescript
+retry<T, P extends any[]>(
+  run: (...args: P) => Promise<T>,
+  count?: number  // default 5
+): IWrappedFn<T, P> & { cancel(): void; clear(): void }
+```
+
+Retries `run` up to `count` times before re-throwing the last error. Uses `queued` for sequential scheduling.
+
+</Accordion>
+
+<Accordion title="execpool — bounded concurrency pool">
+
+```typescript
+execpool<T, P extends any[]>(
+  run: (...args: P) => Promise<T>,
+  options?: {
+    maxExec?: number;  // default 3
+    delay?: number;    // default 10ms
+  }
+): IWrappedFn<T, P> & { clear(): void }
+```
+
+Limits concurrent executions of `run` to `maxExec`. Excess calls are queued and dispatched as capacity becomes available.
+
+```typescript
+import { execpool } from 'react-declarative';
+
+const uploadFile = execpool(
+  async (file: File) => await uploadToS3(file),
+  { maxExec: 3 }
+);
+
+await Promise.all(files.map(uploadFile));
+```
+
+</Accordion>
+
+<Accordion title="trycatch — safe function wrapper">
+
+```typescript
+trycatch<T extends (...args: A) => any, A extends any[]>(
+  run: T,
+  options?: {
+    allowedErrors?: { new(): Error }[];
+    fallback?: (error: Error) => void;
+    defaultValue?: null | false;  // default null
+  }
+): (...args: A) => ReturnType<T> | null
+```
+
+Wraps `run` in a try/catch. On error, calls `fallback` and returns `defaultValue`. Works with both sync and async functions. When `allowedErrors` is provided, only errors matching those constructors are caught — others are re-thrown.
+
+</Accordion>
+
+</AccordionGroup>
+
+## Reactive Primitives
+
+<AccordionGroup>
+
+<Accordion title="Subject">
+
+```typescript
+class Subject<Data = any> implements TSubject<Data>, TObservable<Data> {
+  next(data: Data): Promise<void>
+  subscribe(callback: (data: Data) => void): () => void
+  unsubscribeAll(): void
+  once(callback: (data: Data) => void): () => void
+  toObserver(): TObserver<Data>
+  toPromise(): Promise<Data>
+  map<T>(fn: (value: Data) => T): TObserver<T>
+  filter(fn: (value: Data) => boolean): TObserver<Data>
+  flatMap<T>(fn: (value: Data) => T[]): TObserver<T>
+  reduce<T>(fn: (acm: T, cur: Data) => T, begin: T): TObserver<T>
+  mapAsync<T>(fn: (value: Data) => Promise<T>, fallback?: (e: Error) => void): TObserver<T>
+  tap(fn: (value: Data) => void): TObserver<Data>
+  debounce(delay?: number): TObserver<Data>
+  delay(delay?: number): TObserver<Data>
+  merge<T>(observer: TObserver<T>): TObserver<Data | T>
+}
+```
+
+A hot multicast event bus. Subscribers receive every future emission. Calling `next(data)` asynchronously notifies all subscribers.
+
+</Accordion>
+
+<Accordion title="BehaviorSubject">
+
+```typescript
+class BehaviorSubject<Data = any> extends Subject<Data> {
+  constructor(initialData?: Data | null)
+  get data(): Data | null
+  next(data: Data): Promise<void>
+  toObserver(): TObserver<Data>  // replays current value on subscribe
+}
+```
+
+Like `Subject` but stores the latest value in `.data`. New subscribers immediately receive the current value when they call `toObserver().connect(...)`.
+
+</Accordion>
+
+<Accordion title="Source — observable factory">
+
+```typescript
+class Source {
+  static create<Data>(emitter: (next: (data: Data) => void) => (() => void) | void): TObserver<Data>
+  static createHot<Data>(emitter): TObserver<Data>
+  static createCold<Data>(emitter): TObserver<Data>
+  static merge<A, B, ...>(observers: TObserver<>[]): TObserver<A | B | ...>
+  static join<A, B, ...>(observers, options?: { buffer?, race? }): TObserver<[A, B, ...]>
+  static pipe<Data, Output>(target, emitter): TObserver<Output>
+  static unicast<Data>(factory: () => TObserver<Data>): TObserver<Data>
+  static multicast<Data>(factory: () => TObserver<Data>): TObserver<Data>
+  static fromInterval(interval: number): TObserver<number>
+  static fromPromise<T>(promise: Promise<T>): TObserver<T>
+  static fromDelay(delay: number): TObserver<void>
+  static fromArray<T>(arr: T[]): TObserver<T>
+  static fromEvent(target, event: string): TObserver<Event>
+  static fromValue<Data>(data: Data | (() => Data)): TObserver<Data>
+  static fromSubject<Data>(subject: TSubject<Data>): TObserver<Data>
+  static fromBehaviorSubject<Data>(subject: TBehaviorSubject<Data>): TObserver<Data>
+}
+```
+
+Static factory class for creating and composing `TObserver` streams. `createCold` defers emission until subscription; `createHot` starts immediately.
+
+```typescript
+import { Source } from 'react-declarative';
+
+Source.join([
+  Source.fromPromise(fetchA()),
+  Source.fromPromise(fetchB()),
+]).connect(([a, b]) => render(a, b));
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+## Fetch Utilities
+
+<AccordionGroup>
+
+<Accordion title="fetchApi and FetchError">
+
+```typescript
+fetchApi<T = any>(url: string, options?: RequestInit): Promise<T>
+
+class FetchError extends Error {
+  status: number;
+  body: any;
+}
+```
+
+`fetchApi` is a thin `fetch` wrapper that automatically parses JSON responses and throws a `FetchError` (with `status` and `body` fields) for non-2xx responses.
+
+```typescript
+import { fetchApi, FetchError } from 'react-declarative';
+
+try {
+  const user = await fetchApi<User>('/api/users/1');
+} catch (e) {
+  if (e instanceof FetchError && e.status === 404) {
+    // handle not found
+  }
+}
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+## Form Utilities
+
+<AccordionGroup>
+
+<Accordion title="Field introspection helpers">
+
+```typescript
+getAvailableFields(fields: TypedField[], data: any, payload?: any): TypedField[]
+getInitialData<T>(fields: TypedField[]): T
+getFilterCount(data: Record<string, any>): number
+getInvalidFields<T>(fields: TypedField[], data: T, payload?: any): IInvalidField[]
+getFieldsError<T>(fields: TypedField[], data: T, payload?: any): string | null
+```
+
+| Function | Description |
+|----------|-------------|
+| `getAvailableFields` | Returns only fields visible given current data and payload |
+| `getInitialData` | Derives a zero-value data object from a field schema |
+| `getFilterCount` | Counts non-empty values in a filter data object |
+| `getInvalidFields` | Returns fields that fail their validation rules |
+| `getFieldsError` | Returns the first validation error message, or `null` |
+
+</Accordion>
+
+</AccordionGroup>
+
+## Data Utilities
+
+<AccordionGroup>
+
+<Accordion title="arrays and objects — collection helpers">
+
+```typescript
+import { arrays, objects } from 'react-declarative';
+```
+
+`arrays` is a namespace of array helpers (deduplication, chunking, grouping). `objects` is a namespace of object helpers (deep pick, omit, merge). Consult TypeScript types for the full method list.
+
+</Accordion>
+
+<Accordion title="compareArray">
+
+```typescript
+compareArray(a: any[], b: any[]): boolean
+```
+
+Returns `true` when two arrays have identical elements in identical order (shallow equality per element).
+
+</Accordion>
+
+<Accordion title="deepFlat and flatArray">
+
+```typescript
+deepFlat<T>(arr: any[]): T[]
+flatArray<T>(arr: any[][]): T[]
+```
+
+`deepFlat` recursively flattens arbitrarily nested arrays. `flatArray` flattens exactly one level (equivalent to `arr.flat()`).
+
+</Accordion>
+
+<Accordion title="normalizeText and formatText">
+
+```typescript
+normalizeText(text: string): string
+formatText(template: string, data: Record<string, any>): string
+```
+
+`normalizeText` strips diacritics and lowercases for search comparison. `formatText` replaces `{{key}}` tokens in a template string with values from `data`.
+
+</Accordion>
+
+<Accordion title="compareFulltext">
+
+```typescript
+compareFulltext(text: string, query: string): boolean
+```
+
+Returns `true` when all words in `query` appear in `text`, after normalization. Drives full-text search in `List` and `SearchView`.
+
+</Accordion>
+
+</AccordionGroup>
+
+## Async Utilities
+
+<AccordionGroup>
+
+<Accordion title="sleep">
+
+```typescript
+sleep(ms: number): Promise<void>
+```
+
+Returns a promise that resolves after `ms` milliseconds.
+
+</Accordion>
+
+<Accordion title="timeout">
+
+```typescript
+timeout<T>(
+  promise: Promise<T>,
+  ms: number
+): Promise<T | typeof TIMEOUT_SYMBOL>
+
+// TIMEOUT_SYMBOL — returned when the timeout fires first
+```
+
+Races `promise` against a timeout. Returns `TIMEOUT_SYMBOL` if the timeout fires first; otherwise returns the resolved value.
+
+</Accordion>
+
+<Accordion title="waitForNext">
+
+```typescript
+waitForNext<T>(subject: TSubject<T>): Promise<T>
+```
+
+Returns a promise that resolves with the next single emission from `subject`, then unsubscribes automatically.
+
+</Accordion>
+
+</AccordionGroup>
+
+## Storage Managers
+
+<AccordionGroup>
+
+<Accordion title="createLsManager and createSsManager">
+
+```typescript
+createLsManager<T extends Record<string, any>>(key: string): {
+  getValue(): T | null;
+  setValue(value: T): void;
+  removeValue(): void;
+}
+
+createSsManager<T extends Record<string, any>>(key: string): {
+  getValue(): T | null;
+  setValue(value: T): void;
+  removeValue(): void;
+}
+```
+
+Factory functions that create typed wrappers around `localStorage` (`Ls`) or `sessionStorage` (`Ss`) for a given key, serialising/deserialising as JSON.
+
+</Accordion>
+
+<Accordion title="createLsStateProvider and createSsStateProvider">
+
+```typescript
+createLsStateProvider<T>(key: string, initialState: T): [
+  React.FC<{ children: React.ReactNode }>,
+  () => [T, React.Dispatch<React.SetStateAction<T>>]
+]
+```
+
+Creates a React context provider whose state is persisted to `localStorage` (`Ls`) or `sessionStorage` (`Ss`). Returns `[Provider, useStateHook]`.
+
+```typescript
+const [ThemeProvider, useTheme] = createLsStateProvider('theme', { dark: false });
+
+// In your app root:
+<ThemeProvider><App /></ThemeProvider>
+
+// Anywhere in the tree:
+const [theme, setTheme] = useTheme();
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+## Routing Utilities
+
+<AccordionGroup>
+
+<Accordion title="parseRouteUrl and toRouteUrl">
+
+```typescript
+parseRouteUrl(pattern: string, url: string): Record<string, string> | null
+toRouteUrl(pattern: string, params: Record<string, string>): string
+```
+
+`parseRouteUrl` extracts named parameters from a URL matching a pattern (e.g. `/users/:id`). Returns `null` when the URL does not match. `toRouteUrl` performs the reverse, substituting params into a pattern.
+
+</Accordion>
+
+<Accordion title="getRouteParams and getRouteItem">
+
+```typescript
+getRouteParams<P>(pattern: string): P | null
+getRouteItem<T>(items: IOption<T>[]): T | null
+```
+
+Non-hook variants of `useRouteParams` and `useRouteItem`. Useful in class components or outside of React.
+
+</Accordion>
+
+</AccordionGroup>
+
+## Math / Functional Combinators
+
+<AccordionGroup>
+
+<Accordion title="Boolean combinators">
+
+```typescript
+has(value: any, ...flags: any[]): boolean
+and(...predicates: ((v: any) => boolean)[]): (v: any) => boolean
+or(...predicates: ((v: any) => boolean)[]): (v: any) => boolean
+not(predicate: (v: any) => boolean): (v: any) => boolean
+match<T>(value: T): (...cases: [T, any][]) => any
+```
+
+| Function | Description |
+|----------|-------------|
+| `has(value, ...flags)` | Returns `true` when `value` includes all flags (bitwise or array membership) |
+| `and(...preds)` | Returns a predicate that is `true` when all child predicates are `true` |
+| `or(...preds)` | Returns a predicate that is `true` when any child predicate is `true` |
+| `not(pred)` | Negates a predicate |
+| `match(value)` | Pattern-match helper — returns the value from the first matching case |
+
+</Accordion>
+
+<Accordion title="Array combinators">
+
+```typescript
+first<T>(arr: T[]): T | undefined
+last<T>(arr: T[]): T | undefined
+join<T>(arr: T[], separator?: string): string
+truely<T>(arr: (T | null | undefined | false)[]): T[]
+```
+
+| Function | Description |
+|----------|-------------|
+| `first(arr)` | Returns the first element or `undefined` |
+| `last(arr)` | Returns the last element or `undefined` |
+| `join(arr, sep?)` | Joins elements, defaulting separator to `','` |
+| `truely(arr)` | Filters falsy values — typed equivalent of `.filter(Boolean)` |
+
+</Accordion>
+
+</AccordionGroup>
+
+<Note>
+All HOF wrappers (`singleshot`, `singlerun`, `cancelable`, `debounce`, `queued`, `cached`, `memoize`, `ttl`, `lock`, `retry`, `execpool`, `trycatch`) are pure TypeScript functions with no React dependency and can be used in any context including Node.js workers and non-React code.
+</Note>
